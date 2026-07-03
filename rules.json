@@ -1,0 +1,397 @@
+[
+  {
+    "provider": "disk",
+    "eventId": 7,
+    "severity": "critical",
+    "title": "Disk has a bad block",
+    "cause": "The drive reported an unreadable or unwritable sector. This is a classic early sign of a failing hard drive or SSD, and bad blocks rarely stop at one.",
+    "solutions": [
+      "Back up important data from this drive immediately.",
+      "Check drive health with CrystalDiskInfo or the manufacturer's tool (watch SMART attributes: Reallocated Sectors, Pending Sectors).",
+      "Run 'chkdsk /r' on the affected volume to map out the bad sectors.",
+      "If more bad blocks appear over the following days, replace the drive."
+    ]
+  },
+  {
+    "provider": "disk",
+    "eventId": 11,
+    "severity": "critical",
+    "title": "Disk controller error",
+    "cause": "The driver detected a controller error - caused by a bad or loose data cable, a failing drive, a flaky USB enclosure, or a storage driver problem.",
+    "solutions": [
+      "If it's an internal drive: reseat or replace the SATA cable and try a different SATA port.",
+      "If it's an external drive: try a different USB cable and port; the enclosure electronics are a common culprit.",
+      "Update the storage/chipset drivers from the motherboard vendor.",
+      "Check the drive's SMART health (CrystalDiskInfo) - if degraded, back up and replace it."
+    ]
+  },
+  {
+    "provider": "disk",
+    "eventId": 153,
+    "severity": "medium",
+    "title": "Disk I/O operation was retried",
+    "cause": "An I/O request to the disk timed out and was retried. Occasional entries can be harmless; frequent ones point to a struggling drive, controller, or cable.",
+    "solutions": [
+      "Check the drive's SMART health with CrystalDiskInfo.",
+      "If it's a SATA drive, reseat/replace the cable.",
+      "Update storage drivers and the SSD's firmware.",
+      "If entries are frequent, back up the drive and plan a replacement."
+    ]
+  },
+  {
+    "provider": "storahci",
+    "altProviders": ["stornvme", "iaStorA", "iaStorAC", "iaStorAVC"],
+    "eventId": 129,
+    "severity": "high",
+    "title": "Storage device reset (device stopped responding)",
+    "cause": "The storage driver had to reset the drive because it stopped responding. Common causes: aggressive link power management (especially on SSDs), outdated SSD firmware, or a failing drive.",
+    "solutions": [
+      "Update the SSD's firmware with the manufacturer's tool (Samsung Magician, WD Dashboard, etc.).",
+      "Disable PCIe/AHCI Link State Power Management in the active power plan (Power Options > Advanced settings).",
+      "Update the storage driver (or switch between the vendor driver and Microsoft's inbox driver).",
+      "Check SMART health; if the drive is degrading, replace it."
+    ]
+  },
+  {
+    "provider": "Ntfs",
+    "altProviders": ["Microsoft-Windows-Ntfs"],
+    "eventId": 55,
+    "severity": "critical",
+    "title": "File system corruption detected",
+    "cause": "NTFS found corruption in a volume's structures. Usually caused by hard power-offs, a failing drive, bad RAM, or a buggy storage driver.",
+    "solutions": [
+      "Run 'chkdsk /f' on the volume named in the message (schedule at reboot if it's the system drive).",
+      "Check the drive's SMART health - corruption plus a degrading drive means back up and replace now.",
+      "If corruption recurs on a healthy drive, test RAM (Windows Memory Diagnostic or MemTest86).",
+      "Avoid hard power-offs; check that write caching isn't enabled on a drive without power-loss protection."
+    ]
+  },
+  {
+    "provider": "volsnap",
+    "eventId": 25,
+    "severity": "medium",
+    "title": "All shadow copies were deleted",
+    "cause": "Volume Shadow Copy storage couldn't keep up with disk write activity, so Windows deleted all shadow copies - which also wipes System Restore points.",
+    "solutions": [
+      "Increase shadow storage: vssadmin resize shadowstorage /for=C: /on=C: /maxsize=10%",
+      "If this happened during heavy disk activity (big installs, backups), it may be a one-off.",
+      "If you rely on System Restore or file history versions, verify they still exist afterwards."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Kernel-Power",
+    "eventId": 41,
+    "severity": "critical",
+    "title": "System rebooted without a clean shutdown",
+    "cause": "Windows stopped without shutting down properly - a power cut, hard hang, bluescreen, PSU/overheating problem, or someone holding the power button.",
+    "solutions": [
+      "Look at BugCheckCode in the event details: non-zero means it was a bluescreen - find the matching crash event and stop code.",
+      "If it happens under load (gaming, rendering): check CPU/GPU temperatures and the power supply.",
+      "Disable any CPU/GPU overclock and XMP memory profile to test stability.",
+      "If it happens when idle or sleeping: update BIOS and chipset drivers, and review sleep/hibernate settings.",
+      "If BugCheckCode is 0 and it correlates with mains power issues, consider a UPS."
+    ]
+  },
+  {
+    "provider": "EventLog",
+    "eventId": 6008,
+    "severity": "medium",
+    "title": "Previous shutdown was unexpected",
+    "cause": "Windows noticed at boot that the last session didn't end cleanly. This is the companion record to Kernel-Power 41 - same underlying causes.",
+    "solutions": [
+      "Treat together with any Kernel-Power 41 entries at the same time - see that finding's advice.",
+      "If there is no matching crash evidence, suspect power loss or a forced power-off."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-WER-SystemErrorReporting",
+    "altProviders": ["BugCheck"],
+    "eventId": 1001,
+    "severity": "critical",
+    "title": "Windows crashed with a blue screen",
+    "cause": "The system bluescreened. The message contains the stop code and the path to a memory dump - the stop code and the faulting driver are the key clues.",
+    "solutions": [
+      "Note the stop code (e.g. 0x0000003B) from the message and search for it together with any named driver.",
+      "Open the minidump from C:\\Windows\\Minidump in WinDbg and run '!analyze -v' to identify the faulting driver.",
+      "Update or roll back the identified driver (GPU and network drivers are the most common offenders).",
+      "If crashes are random with varying stop codes, test RAM with MemTest86 and disable XMP to test.",
+      "Run 'sfc /scannow' and 'dism /online /cleanup-image /restorehealth' to rule out system file corruption."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-WHEA-Logger",
+    "eventId": 17,
+    "severity": "medium",
+    "title": "Corrected hardware error (PCI Express)",
+    "cause": "The hardware detected and corrected a PCIe bus error, often on the GPU or NIC link. Corrected errors are non-fatal, but frequent ones indicate a marginal connection or firmware issue.",
+    "solutions": [
+      "Update the BIOS and chipset drivers.",
+      "Update the driver of the device named in the event (often GPU or network card).",
+      "If frequent: reseat the card, and try disabling PCIe link power management.",
+      "Occasional corrected errors with no symptoms can be safely ignored."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-WHEA-Logger",
+    "eventId": 18,
+    "severity": "critical",
+    "title": "Fatal hardware error (machine check)",
+    "cause": "The CPU reported an uncorrectable hardware error - CPU core/cache, memory, or power delivery. Often accompanies a crash or reboot, and commonly caused by unstable overclocks or undervolts.",
+    "solutions": [
+      "Remove any CPU overclock/undervolt and disable XMP/EXPO memory profiles, then see if it recurs.",
+      "Update the BIOS - vendors regularly ship microcode fixes for exactly this.",
+      "Check CPU temperatures under load and verify PSU cables are seated.",
+      "Test RAM with MemTest86.",
+      "If it persists at stock settings on an updated BIOS, the CPU or motherboard may need RMA."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-WHEA-Logger",
+    "eventId": 19,
+    "severity": "medium",
+    "title": "Corrected CPU hardware error",
+    "cause": "The CPU detected and corrected an internal error. Occasional entries are tolerable; frequent ones usually mean a marginal overclock/undervolt or a BIOS/microcode issue.",
+    "solutions": [
+      "If overclocked or undervolted, back the settings off - this is the most common cause.",
+      "Update the BIOS for the latest CPU microcode.",
+      "If frequent at stock settings, monitor closely - corrected errors can precede fatal ones (WHEA 18)."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7000,
+    "severity": "medium",
+    "title": "A service failed to start",
+    "cause": "Windows couldn't start the service named in the message - missing files (often leftovers from uninstalled software), a bad logon account, or a failed dependency.",
+    "solutions": [
+      "Identify the service in the message. If it belongs to software you've uninstalled, delete the orphan: sc delete <ServiceName>",
+      "If you still use the software, reinstall it to repair the service.",
+      "Check the service's dependencies and logon account in services.msc.",
+      "If it only fails at boot but starts fine manually, set it to 'Automatic (Delayed Start)'."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7009,
+    "severity": "medium",
+    "title": "Service start timed out",
+    "cause": "A service didn't respond within the startup timeout (default 30s) - usually boot-time disk congestion on slower drives, or a service waiting on the network.",
+    "solutions": [
+      "Set the affected service to 'Automatic (Delayed Start)' in services.msc.",
+      "If several services do this and the system drive is a hard disk, that's the bottleneck - an SSD fixes it.",
+      "As a workaround, raise the timeout: registry value ServicesPipeTimeout (DWORD, ms) under HKLM\\SYSTEM\\CurrentControlSet\\Control, then reboot."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7023,
+    "severity": "medium",
+    "title": "Service stopped with an error",
+    "cause": "The service named in the message shut itself down and reported an error code. The error text in the message usually says why.",
+    "solutions": [
+      "Read the error in the message - it's often specific (access denied, missing file, bad configuration).",
+      "Update or reinstall the application that owns the service.",
+      "If it's a Windows built-in service, search the service name + error text; many have well-known fixes."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7031,
+    "severity": "high",
+    "title": "Service crashed unexpectedly",
+    "cause": "The service terminated without being asked to and Windows applied its recovery action (usually a restart). The service's own process crashed.",
+    "solutions": [
+      "Check the Application log for an 'Application Error 1000' entry at the same time - it names the faulting module.",
+      "Update or reinstall the software that owns the service.",
+      "If it crashes repeatedly in a short window, the recovery restarts can mask a real problem - fix the root cause."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7034,
+    "severity": "high",
+    "title": "Service crashed (recovery exhausted)",
+    "cause": "The service crashed and Windows has stopped trying to restart it - it is now down until manually started or the machine reboots.",
+    "solutions": [
+      "Check the Application log for a matching 'Application Error 1000' entry naming the faulting module.",
+      "Update or reinstall the owning software; check the vendor's site for known crash fixes.",
+      "Restart the service manually (services.msc) once addressed, and consider configuring recovery actions on its Recovery tab."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
+    "severity": "high",
+    "title": "Application crash",
+    "cause": "A program crashed. The message names the faulting application and the faulting module - the module is the better clue (the app may be a victim of a bad DLL or driver).",
+    "solutions": [
+      "Note the 'Faulting application' and 'Faulting module' in the message.",
+      "Update or reinstall the crashing application.",
+      "If the faulting module belongs to a driver (e.g. GPU DLLs like nvwgf2umx.dll, atidxx64.dll), update that driver instead.",
+      "If many different apps crash in ntdll.dll or kernelbase.dll, suspect the system: test RAM and run 'sfc /scannow'."
+    ]
+  },
+  {
+    "provider": "Application Hang",
+    "eventId": 1002,
+    "severity": "medium",
+    "title": "Application stopped responding",
+    "cause": "A program froze and was terminated (or waited out). One-offs are usually harmless; a pattern points at the app, a slow/failing disk it was waiting on, or a driver.",
+    "solutions": [
+      "Update the application named in the message.",
+      "If it hangs while opening/saving files, check the health of the disk or network share involved.",
+      "If many different apps hang, check disk health and look for disk events (disk 7/11/153, storahci 129) in the same log."
+    ]
+  },
+  {
+    "provider": ".NET Runtime",
+    "eventId": 1026,
+    "severity": "medium",
+    "title": "Unhandled .NET exception in an application",
+    "cause": "A .NET application crashed with an unhandled exception. The message includes the exception type and stack trace - useful to the app's developer.",
+    "solutions": [
+      "Update the application - this is almost always an app bug, not a Windows problem.",
+      "Check for a paired 'Application Error 1000' naming the same process.",
+      "If it's your own app, the stack trace in the message is the starting point.",
+      "Repair the .NET runtime only if many unrelated .NET apps fail the same way."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-DistributedCOM",
+    "eventId": 10016,
+    "severity": "info",
+    "title": "DCOM permission mismatch (safe to ignore)",
+    "cause": "A process requested a DCOM activation permission it doesn't have. Microsoft's official guidance: these are by design, do not affect functionality, and can be ignored.",
+    "solutions": [
+      "Ignore it - Microsoft explicitly documents these events as safe to ignore.",
+      "Only investigate if a specific application visibly fails and its failure matches the CLSID/APPID in this event."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-DistributedCOM",
+    "eventId": 10010,
+    "severity": "low",
+    "title": "DCOM server did not register in time",
+    "cause": "A COM server didn't register within the timeout - common during shutdown, right after Windows updates, or when a background app is slow to start. Usually harmless noise.",
+    "solutions": [
+      "Ignore unless an application is visibly misbehaving.",
+      "If frequent, search the CLSID from the message in the registry (HKCR\\CLSID) to identify which app owns it, then update or reinstall that app."
+    ]
+  },
+  {
+    "provider": "Display",
+    "altProviders": ["nvlddmkm", "amdkmdag", "igfx"],
+    "eventId": 4101,
+    "severity": "high",
+    "title": "Display driver stopped responding and recovered (TDR)",
+    "cause": "The GPU driver hung and Windows reset it (screen goes black for a couple of seconds). Causes: buggy GPU driver, overheating, unstable GPU overclock or undervolt, or a failing card.",
+    "solutions": [
+      "Clean-install the latest GPU driver: remove the old one with DDU (Display Driver Uninstaller) in safe mode first.",
+      "Check GPU temperatures under load; clean dust and verify fans spin.",
+      "Remove any GPU overclock/undervolt (including factory OC - try underclocking slightly to test).",
+      "If it persists across driver versions, try an older known-good driver branch; if it still persists, suspect the card or its power cables."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Kernel-PnP",
+    "eventId": 219,
+    "severity": "low",
+    "title": "A driver failed to load at boot",
+    "cause": "A driver for the device named in the message didn't load, usually a timing issue early in boot. If the device works once Windows is up, it's cosmetic.",
+    "solutions": [
+      "Check whether the device named in the message actually works - if yes, ignore this.",
+      "If the device doesn't work, update its driver from the vendor's site.",
+      "Common harmless source: 'dam' (Desktop Activity Moderator) and similar system drivers on some hardware."
+    ]
+  },
+  {
+    "provider": "Schannel",
+    "eventId": 36871,
+    "severity": "low",
+    "title": "TLS handshake failed",
+    "cause": "Some process failed to establish an SSL/TLS connection. Usually background noise from an app or service trying an outdated protocol or hitting a transient network issue.",
+    "solutions": [
+      "Ignore if nothing is visibly broken - these are very common and mostly harmless.",
+      "If an app's connections are actually failing, update that app.",
+      "If frequent, enabling Schannel event logging detail can identify the process (search: Schannel EventLogging registry)."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-DNS-Client",
+    "eventId": 1014,
+    "severity": "low",
+    "title": "DNS name resolution timed out",
+    "cause": "A DNS lookup timed out - a transient network hiccup, a slow router/ISP DNS server, or Wi-Fi drops. Occasional entries are normal.",
+    "solutions": [
+      "Ignore occasional entries.",
+      "If frequent: reboot the router, and try switching DNS servers to 1.1.1.1 (Cloudflare) or 8.8.8.8 (Google) in adapter settings.",
+      "On Wi-Fi, check for signal drops; update the network adapter driver."
+    ]
+  },
+  {
+    "provider": "NETLOGON",
+    "altProviders": ["Netlogon"],
+    "eventId": 5719,
+    "severity": "medium",
+    "title": "No domain controller could be reached",
+    "cause": "A domain-joined machine couldn't contact a domain controller. At boot this is usually just the network coming up after the check runs; during normal use it means real connectivity or DNS problems.",
+    "solutions": [
+      "If it only occurs at startup and everything works afterwards, it's a known timing quirk - ignorable.",
+      "Verify the machine's DNS points at the domain's DNS servers (not a public resolver).",
+      "Check basic connectivity to the DC: ping it, and test with 'nltest /dsgetdc:yourdomain'.",
+      "On laptops/VPN clients, this is expected whenever off the corporate network."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-GroupPolicy",
+    "eventId": 1058,
+    "severity": "medium",
+    "title": "Group Policy processing failed",
+    "cause": "The machine couldn't read a GPO from the domain's SYSVOL share - DNS misconfiguration, DC connectivity, or SYSVOL permission/replication problems.",
+    "solutions": [
+      "Run 'gpupdate /force' and note the exact error.",
+      "Verify DNS points at the domain controllers.",
+      "Test SYSVOL access directly: open \\\\yourdomain\\SYSVOL in Explorer.",
+      "If multiple machines are affected, investigate SYSVOL replication on the DCs (this is a server-side issue)."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-WindowsUpdateClient",
+    "eventId": 20,
+    "severity": "medium",
+    "title": "Windows Update installation failed",
+    "cause": "An update failed to install. The message includes the KB number and an error code - the code is the key to the specific fix.",
+    "solutions": [
+      "Note the KB number and error code (0x...) from the message and search for that combination.",
+      "Run the Windows Update troubleshooter (Settings > Troubleshoot).",
+      "Reset update components: stop the wuauserv and bits services, rename C:\\Windows\\SoftwareDistribution, restart the services, retry.",
+      "If one specific KB keeps failing, download it manually from the Microsoft Update Catalog."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-User Profiles Service",
+    "eventId": 1511,
+    "severity": "high",
+    "title": "Logged on with a temporary profile",
+    "cause": "Windows couldn't load the user's profile and created a temporary one - changes made in this session are lost at logoff. Usually profile corruption or a stale registry entry.",
+    "solutions": [
+      "Don't save important work while in the temporary profile - it vanishes at logoff.",
+      "Fix the registry: under HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList, find the SID ending in '.bak', and repair the duplicate (rename/remove the broken entry).",
+      "If that fails, create a fresh user account and copy the data across from C:\\Users\\<olduser>.",
+      "Check disk health - profile corruption is sometimes the first symptom of a failing drive."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Kernel-Processor-Power",
+    "eventId": 37,
+    "severity": "low",
+    "title": "CPU speed limited by firmware",
+    "cause": "The firmware capped the CPU's speed - on laptops this is normal thermal/power management; on desktops it can indicate a BIOS power-limit setting or cooling issue.",
+    "solutions": [
+      "On a laptop: normal behavior on battery or when warm - usually ignorable.",
+      "If performance is noticeably poor: check cooling (dust, fans) and CPU temperatures.",
+      "Set the power plan to Balanced/High performance and check BIOS settings for power limits.",
+      "Update the BIOS - some vendors have shipped fixes for over-aggressive throttling."
+    ]
+  }
+]
