@@ -3,6 +3,12 @@ using System.Text.Json;
 
 namespace EventLogAnalyzer;
 
+public class DetailProp
+{
+    public int Index { get; set; }
+    public string Name { get; set; } = "";
+}
+
 public class Rule
 {
     public string Provider { get; set; } = "";
@@ -12,6 +18,10 @@ public class Rule
     public string Title { get; set; } = "";
     public string Cause { get; set; } = "";
     public string[] Solutions { get; set; } = Array.Empty<string>();
+
+    // Which event data properties identify the culprit (e.g. faulting app,
+    // service name). Used to build a per-value occurrence breakdown.
+    public DetailProp[]? BreakdownProps { get; set; }
 
     public bool Matches(string provider, int eventId)
     {
@@ -48,8 +58,15 @@ public class Finding
     public string Title { get; set; } = "";
     public string Cause { get; set; } = "";
     public string[] Solutions { get; set; } = Array.Empty<string>();
-    public string SampleMessage { get; set; } = "";
     public bool Recognised { get; set; }
+
+    /// <summary>"180 x GameManagerService3.exe / KERNELBASE.dll" style culprit counts, most frequent first.</summary>
+    public List<(string Value, int Count)> Breakdown { get; set; } = new();
+    public string BreakdownLabel { get; set; } = "";
+    public int BreakdownOverflow { get; set; }
+
+    /// <summary>Up to a few distinct rendered event messages.</summary>
+    public List<string> Samples { get; set; } = new();
 
     public int SeverityRank => Severity.ToLowerInvariant() switch
     {
@@ -81,16 +98,34 @@ public static class ReportFormatter
         sb.AppendLine();
         sb.AppendLine("What it means:");
         sb.AppendLine("  " + f.Cause);
+
+        if (f.Breakdown.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Breakdown by {f.BreakdownLabel}:");
+            foreach (var (value, count) in f.Breakdown.Take(10))
+                sb.AppendLine($"  {count,6:N0} x  {value}");
+            int more = f.Breakdown.Count - 10;
+            if (more > 0) sb.AppendLine($"          ... and {more:N0} more distinct value(s)");
+            if (f.BreakdownOverflow > 0) sb.AppendLine($"          ... plus {f.BreakdownOverflow:N0} occurrence(s) not itemised");
+        }
+
         sb.AppendLine();
         sb.AppendLine("What to do:");
         for (int i = 0; i < f.Solutions.Length; i++)
             sb.AppendLine($"  {i + 1}. {f.Solutions[i]}");
-        if (!string.IsNullOrWhiteSpace(f.SampleMessage))
+
+        if (f.Samples.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("Sample event message:");
-            foreach (var line in f.SampleMessage.Trim().Split('\n'))
-                sb.AppendLine("  " + line.TrimEnd());
+            sb.AppendLine(f.Samples.Count == 1 ? "Sample event message:" : $"Sample event messages ({f.Samples.Count} distinct):");
+            for (int i = 0; i < f.Samples.Count; i++)
+            {
+                if (f.Samples.Count > 1)
+                    sb.AppendLine($"  --- sample {i + 1} ---");
+                foreach (var line in f.Samples[i].Trim().Split('\n'))
+                    sb.AppendLine("  " + line.TrimEnd());
+            }
         }
         return sb.ToString();
     }

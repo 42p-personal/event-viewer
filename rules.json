@@ -162,6 +162,10 @@
     "eventId": 7000,
     "severity": "medium",
     "title": "A service failed to start",
+    "breakdownProps": [
+      { "index": 0, "name": "Service" },
+      { "index": 1, "name": "Error" }
+    ],
     "cause": "Windows couldn't start the service named in the message - missing files (often leftovers from uninstalled software), a bad logon account, or a failed dependency.",
     "solutions": [
       "Identify the service in the message. If it belongs to software you've uninstalled, delete the orphan: sc delete <ServiceName>",
@@ -175,6 +179,7 @@
     "eventId": 7009,
     "severity": "medium",
     "title": "Service start timed out",
+    "breakdownProps": [{ "index": 1, "name": "Service" }],
     "cause": "A service didn't respond within the startup timeout (default 30s) - usually boot-time disk congestion on slower drives, or a service waiting on the network.",
     "solutions": [
       "Set the affected service to 'Automatic (Delayed Start)' in services.msc.",
@@ -187,6 +192,10 @@
     "eventId": 7023,
     "severity": "medium",
     "title": "Service stopped with an error",
+    "breakdownProps": [
+      { "index": 0, "name": "Service" },
+      { "index": 1, "name": "Error" }
+    ],
     "cause": "The service named in the message shut itself down and reported an error code. The error text in the message usually says why.",
     "solutions": [
       "Read the error in the message - it's often specific (access denied, missing file, bad configuration).",
@@ -199,6 +208,7 @@
     "eventId": 7031,
     "severity": "high",
     "title": "Service crashed unexpectedly",
+    "breakdownProps": [{ "index": 0, "name": "Service" }],
     "cause": "The service terminated without being asked to and Windows applied its recovery action (usually a restart). The service's own process crashed.",
     "solutions": [
       "Check the Application log for an 'Application Error 1000' entry at the same time - it names the faulting module.",
@@ -211,6 +221,7 @@
     "eventId": 7034,
     "severity": "high",
     "title": "Service crashed (recovery exhausted)",
+    "breakdownProps": [{ "index": 0, "name": "Service" }],
     "cause": "The service crashed and Windows has stopped trying to restart it - it is now down until manually started or the machine reboots.",
     "solutions": [
       "Check the Application log for a matching 'Application Error 1000' entry naming the faulting module.",
@@ -223,6 +234,10 @@
     "eventId": 1000,
     "severity": "high",
     "title": "Application crash",
+    "breakdownProps": [
+      { "index": 0, "name": "Faulting application" },
+      { "index": 3, "name": "Faulting module" }
+    ],
     "cause": "A program crashed. The message names the faulting application and the faulting module - the module is the better clue (the app may be a victim of a bad DLL or driver).",
     "solutions": [
       "Note the 'Faulting application' and 'Faulting module' in the message.",
@@ -236,6 +251,7 @@
     "eventId": 1002,
     "severity": "medium",
     "title": "Application stopped responding",
+    "breakdownProps": [{ "index": 0, "name": "Program" }],
     "cause": "A program froze and was terminated (or waited out). One-offs are usually harmless; a pattern points at the app, a slow/failing disk it was waiting on, or a driver.",
     "solutions": [
       "Update the application named in the message.",
@@ -284,6 +300,7 @@
     "eventId": 4101,
     "severity": "high",
     "title": "Display driver stopped responding and recovered (TDR)",
+    "breakdownProps": [{ "index": 0, "name": "Driver" }],
     "cause": "The GPU driver hung and Windows reset it (screen goes black for a couple of seconds). Causes: buggy GPU driver, overheating, unstable GPU overclock or undervolt, or a failing card.",
     "solutions": [
       "Clean-install the latest GPU driver: remove the old one with DDU (Display Driver Uninstaller) in safe mode first.",

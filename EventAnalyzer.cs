@@ -4,6 +4,10 @@ namespace EventLogAnalyzer;
 
 public static class EventAnalyzer
 {
+    const int MaxSamples = 3;          // distinct rendered messages kept per issue
+    const int MaxSampleAttempts = 10;  // rendering is slow - don't chase distinct samples forever
+    const int MaxBreakdownKeys = 200;  // distinct culprit values tracked per issue
+
     public static AnalysisResult Analyze(string evtxPath, IReadOnlyList<Rule> rules)
     {
         if (!File.Exists(evtxPath))
@@ -28,7 +32,11 @@ public static class EventAnalyzer
                     var key = (rec.ProviderName ?? "(unknown provider)", rec.Id);
                     if (!groups.TryGetValue(key, out var agg))
                     {
-                        agg = new Agg { Level = level, SampleMessage = SafeMessage(rec) };
+                        agg = new Agg
+                        {
+                            Level = level,
+                            Rule = rules.FirstOrDefault(r => r.Matches(key.Item1, key.Item2)),
+                        };
                         groups[key] = agg;
                     }
                     agg.Count++;
@@ -40,6 +48,9 @@ public static class EventAnalyzer
                         if (agg.First == null || t < agg.First) agg.First = t;
                         if (agg.Last == null || t > agg.Last) agg.Last = t;
                     }
+
+                    CollectSample(rec, agg);
+                    CollectBreakdown(rec, agg);
                 }
             }
         }
@@ -47,21 +58,25 @@ public static class EventAnalyzer
         var findings = new List<Finding>();
         foreach (var ((provider, id), agg) in groups)
         {
-            var rule = rules.FirstOrDefault(r => r.Matches(provider, id));
-            findings.Add(rule != null
+            findings.Add(agg.Rule != null
                 ? new Finding
                 {
                     Recognised = true,
-                    Severity = rule.Severity,
+                    Severity = agg.Rule.Severity,
                     Provider = provider,
                     EventId = id,
                     Count = agg.Count,
                     FirstSeen = agg.First?.ToLocalTime(),
                     LastSeen = agg.Last?.ToLocalTime(),
-                    Title = rule.Title,
-                    Cause = rule.Cause,
-                    Solutions = rule.Solutions,
-                    SampleMessage = agg.SampleMessage,
+                    Title = agg.Rule.Title,
+                    Cause = agg.Rule.Cause,
+                    Solutions = agg.Rule.Solutions,
+                    Breakdown = agg.SortedBreakdown(),
+                    BreakdownLabel = agg.Rule.BreakdownProps != null
+                        ? string.Join(" / ", agg.Rule.BreakdownProps.Select(p => p.Name))
+                        : "",
+                    BreakdownOverflow = agg.BreakdownOverflow,
+                    Samples = agg.Samples,
                 }
                 : MakeUnknownFinding(provider, id, agg));
         }
@@ -73,6 +88,41 @@ public static class EventAnalyzer
         });
 
         return new AnalysisResult { TotalEvents = total, ProblemEvents = problems, Findings = findings };
+    }
+
+    static void CollectSample(EventRecord rec, Agg agg)
+    {
+        if (agg.Samples.Count >= MaxSamples || agg.SampleAttempts >= MaxSampleAttempts) return;
+        agg.SampleAttempts++;
+        var msg = SafeMessage(rec);
+        if (!string.IsNullOrWhiteSpace(msg) && !agg.Samples.Contains(msg))
+            agg.Samples.Add(msg);
+    }
+
+    static void CollectBreakdown(EventRecord rec, Agg agg)
+    {
+        var props = agg.Rule?.BreakdownProps;
+        if (props == null || props.Length == 0) return;
+
+        string key;
+        try
+        {
+            key = string.Join(" / ", props.Select(p =>
+                p.Index < rec.Properties.Count
+                    ? rec.Properties[p.Index].Value?.ToString() ?? "?"
+                    : "?"));
+        }
+        catch
+        {
+            key = "?";
+        }
+
+        if (agg.Breakdown.TryGetValue(key, out var count))
+            agg.Breakdown[key] = count + 1;
+        else if (agg.Breakdown.Count < MaxBreakdownKeys)
+            agg.Breakdown[key] = 1;
+        else
+            agg.BreakdownOverflow++;
     }
 
     static Finding MakeUnknownFinding(string provider, int id, Agg agg)
@@ -96,12 +146,12 @@ public static class EventAnalyzer
             Cause = "This event is not in the built-in rules database, so no specific advice is available.",
             Solutions = new[]
             {
-                $"Read the sample message below - it often states the problem directly.",
+                $"Read the sample messages below - they often state the problem directly.",
                 $"Search the web for: {provider} event {id}",
                 "If it occurs frequently or lines up with a symptom you're seeing, investigate the software or device that owns this provider.",
                 "Consider adding a rule for it to rules.json once you know what it means.",
             },
-            SampleMessage = agg.SampleMessage,
+            Samples = agg.Samples,
         };
     }
 
@@ -132,6 +182,13 @@ public static class EventAnalyzer
         public int Count;
         public byte Level;
         public DateTime? First, Last;
-        public string SampleMessage = "";
+        public Rule? Rule;
+        public List<string> Samples = new();
+        public int SampleAttempts;
+        public Dictionary<string, int> Breakdown = new();
+        public int BreakdownOverflow;
+
+        public List<(string, int)> SortedBreakdown() =>
+            Breakdown.OrderByDescending(kv => kv.Value).Select(kv => (kv.Key, kv.Value)).ToList();
     }
 }

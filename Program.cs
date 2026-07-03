@@ -7,13 +7,15 @@ static class Program
     [STAThread]
     static int Main(string[] args)
     {
-        // Headless mode: EventLogAnalyzer.exe <file.evtx> [report.txt]
+        // Headless mode: EventLogAnalyzer.exe --report <file.evtx> [report.txt]
         // Analyzes the file and writes a text report instead of opening the UI.
-        if (args.Length > 0)
-            return RunHeadless(args);
+        if (args.Length > 1 && args[0].Equals("--report", StringComparison.OrdinalIgnoreCase))
+            return RunHeadless(args.Skip(1).ToArray());
 
+        // A bare .evtx argument opens the UI with the file analyzed,
+        // so "Open with" / drag-onto-exe work.
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        Application.Run(new MainForm(args.Length > 0 ? args[0] : null));
         return 0;
     }
 

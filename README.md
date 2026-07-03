@@ -34,10 +34,17 @@ Browse to an `.evtx` file (or drag one onto the window). Get one by opening
 Event Viewer → right-click a log (e.g. **System**) → **Save All Events As...**,
 or straight from `C:\Windows\System32\winevt\Logs\` (needs admin).
 
+You can also pass an `.evtx` file as an argument to open the UI with it already
+analyzed (works with "Open with" and dragging a file onto the exe):
+
+```powershell
+EventLogAnalyzer.exe C:\path\to\System.evtx
+```
+
 ### Headless mode
 
 ```powershell
-EventLogAnalyzer.exe C:\path\to\System.evtx [report.txt]
+EventLogAnalyzer.exe --report C:\path\to\System.evtx [report.txt]
 ```
 
 Writes the full findings report to a text file instead of opening the UI
@@ -55,6 +62,14 @@ Add entries to `rules.json` (it's copied next to the exe at build time):
   "severity": "critical | high | medium | low | info",
   "title": "Short issue name",
   "cause": "What it means in plain English.",
-  "solutions": ["Step 1", "Step 2"]
+  "solutions": ["Step 1", "Step 2"],
+  "breakdownProps": [{ "index": 0, "name": "Service" }]
 }
 ```
+
+`breakdownProps` is optional: it names positions in the event's data properties
+that identify the culprit (faulting app, service name, driver, ...). When set,
+the detail pane shows an occurrence count per distinct value — e.g. which
+specific applications account for 233 crash events. Find the right index by
+looking at the EventData fields in Event Viewer's Details tab (they are
+zero-based, in order).

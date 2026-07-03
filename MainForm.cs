@@ -10,8 +10,11 @@ public class MainForm : Form
     readonly ToolStripStatusLabel _status = new() { Text = "Pick an .evtx file to analyze. Tip: you can also drag and drop one onto this window." };
     List<Rule> _rules = new();
 
-    public MainForm()
+    readonly string? _initialFile;
+
+    public MainForm(string? initialFile = null)
     {
+        _initialFile = initialFile;
         Text = "Event Log Analyzer";
         Width = 1150;
         Height = 780;
@@ -94,7 +97,15 @@ public class MainForm : Form
             }
         };
 
-        Load += (_, _) => LoadRules();
+        Load += async (_, _) =>
+        {
+            LoadRules();
+            if (_initialFile != null)
+            {
+                _pathBox.Text = _initialFile;
+                await RunAnalysisAsync();
+            }
+        };
     }
 
     static DataGridViewTextBoxColumn NewCol(string name, int width) =>
@@ -170,7 +181,13 @@ public class MainForm : Form
 
             int recognised = result.Findings.Count(f => f.Recognised);
             _status.Text = $"{result.TotalEvents:N0} events scanned - {result.ProblemEvents:N0} errors/warnings in {result.Findings.Count} distinct issues ({recognised} with specific advice). Select a row for details.";
-            if (_grid.Rows.Count > 0) _grid.Rows[0].Selected = true;
+            if (_grid.Rows.Count > 0)
+            {
+                _grid.Rows[0].Selected = true;
+                // The grid auto-selects the first row during Rows.Add, before its
+                // Tag is assigned - refresh the detail pane now that Tags exist.
+                ShowDetail();
+            }
             else _status.Text = $"{result.TotalEvents:N0} events scanned - no errors or warnings found. This log looks healthy.";
         }
         catch (Exception ex)
@@ -188,7 +205,11 @@ public class MainForm : Form
     void ShowDetail()
     {
         if (_grid.SelectedRows.Count > 0 && _grid.SelectedRows[0].Tag is Finding f)
-            _detailBox.Text = ReportFormatter.Format(f).Replace("\n", Environment.NewLine).Replace("\r\r", "\r");
+        {
+            _detailBox.Text = ReportFormatter.Format(f);
+            _detailBox.SelectionStart = 0;
+            _detailBox.ScrollToCaret();
+        }
     }
 
     static Color SeverityColor(string severity) => severity.ToLowerInvariant() switch
