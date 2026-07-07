@@ -1,0 +1,27 @@
+# One-shot cleanup: delete the repository's GitHub Pages site now that the
+# web app is hosted on Cloudflare Pages. Safe to delete this file after it
+# has run successfully.
+name: Unpublish GitHub Pages site
+
+on:
+  workflow_dispatch:
+
+permissions:
+  pages: write
+
+jobs:
+  unpublish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the Pages site
+        run: |
+          delete_pages() {
+            curl -sSf -X DELETE \
+              -H "Authorization: Bearer $1" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pages"
+          }
+          delete_pages "${{ secrets.GITHUB_TOKEN }}" \
+            || delete_pages "${{ secrets.PAGES_ADMIN_TOKEN }}" \
+            || { echo "::error::Could not delete the Pages site - unpublish it in Settings -> Pages."; exit 1; }
+          echo "GitHub Pages site deleted."
