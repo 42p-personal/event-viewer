@@ -1,0 +1,141 @@
+:root {
+  --bg: #f6f8fa;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --card: #ffffff;
+  --border: #d1d9e0;
+  --accent: #1f6feb;
+  --accent-fg: #ffffff;
+  --sev-critical: #ffcdcd;
+  --sev-high: #ffe4c8;
+  --sev-medium: #fff9c4;
+  --sev-low: #e2f0ff;
+  --sev-info: #ebebeb;
+  --sev-text: #1f2328;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --card: #161b22;
+    --border: #30363d;
+    --accent: #388bfd;
+    --sev-critical: #5c2224;
+    --sev-high: #5a3a1a;
+    --sev-medium: #54491a;
+    --sev-low: #1d3a5c;
+    --sev-info: #30363d;
+    --sev-text: #e6edf3;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.5;
+}
+.wrap { max-width: 1150px; margin: 0 auto; padding: 0 16px; }
+code, kbd, pre { font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace; }
+
+header { padding: 28px 0 4px; }
+h1 { margin: 0 0 4px; font-size: 1.6rem; }
+.tagline { margin: 0 0 16px; color: var(--muted); max-width: 62em; }
+
+#dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 28px 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+#dropzone:hover, #dropzone:focus-visible, #dropzone.drag {
+  border-color: var(--accent);
+  outline: none;
+}
+.dz-inner { display: flex; gap: 16px; align-items: center; justify-content: center; text-align: left; }
+.dz-icon { font-size: 2.2rem; }
+.dz-sub { color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+
+.howto { margin: 14px 0; color: var(--muted); font-size: 0.95rem; }
+.howto summary { cursor: pointer; color: var(--fg); }
+.howto a { color: var(--accent); }
+
+#status {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+#status.error { border-color: #d1242f; color: #d1242f; }
+
+#results { margin-top: 16px; }
+.summary { margin-bottom: 10px; color: var(--muted); }
+
+.results-grid { display: grid; grid-template-rows: auto auto; gap: 12px; }
+.table-scroll {
+  overflow: auto;
+  max-height: 46vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+thead th {
+  position: sticky; top: 0;
+  background: var(--card);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+tbody td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tbody tr { cursor: pointer; }
+tbody tr.sev { color: var(--sev-text); }
+tbody tr.sev-critical { background: var(--sev-critical); }
+tbody tr.sev-high { background: var(--sev-high); }
+tbody tr.sev-medium { background: var(--sev-medium); }
+tbody tr.sev-low { background: var(--sev-low); }
+tbody tr.sev-info { background: var(--sev-info); }
+tbody tr.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.nowrap { white-space: nowrap; }
+
+.detail {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  min-height: 180px;
+  max-height: 44vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.86rem;
+}
+
+.actions { margin: 14px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+button.secondary { background: transparent; color: var(--accent); }
+button:hover { filter: brightness(1.08); }
+
+footer { color: var(--muted); font-size: 0.85rem; padding: 18px 16px 30px; }
+footer a { color: var(--accent); }
+
+@media (max-width: 700px) {
+  .dz-inner { flex-direction: column; text-align: center; }
+}
