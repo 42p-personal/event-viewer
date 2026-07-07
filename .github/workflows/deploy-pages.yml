@@ -36,10 +36,14 @@ jobs:
           cp rules.json _site/rules.json
           echo "ev.42p.uk" > _site/CNAME
 
+      # PAGES_ADMIN_TOKEN (fine-grained PAT with Administration + Pages write)
+      # lets the workflow enable Pages and set the custom domain by itself;
+      # without it the default token works only once Pages is already enabled.
       - name: Enable and configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
+          token: ${{ secrets.PAGES_ADMIN_TOKEN || github.token }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -54,10 +58,21 @@ jobs:
       # set "ev.42p.uk" manually under Settings -> Pages -> Custom domain.
       - name: Set custom domain (ev.42p.uk)
         run: |
-          curl -sS -X PUT \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          curl -sSf -X PUT \
+            -H "Authorization: Bearer ${{ secrets.PAGES_ADMIN_TOKEN || secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/pages" \
             -d '{"cname":"ev.42p.uk"}' \
             && echo "Custom domain set to ev.42p.uk" \
             || echo "::warning::Could not set the custom domain automatically. Set 'ev.42p.uk' in Settings -> Pages."
+
+      # Enforce HTTPS so http://ev.42p.uk redirects. Fails harmlessly until
+      # GitHub has finished issuing the domain's certificate.
+      - name: Enforce HTTPS (best effort)
+        run: |
+          curl -sSf -X PUT \
+            -H "Authorization: Bearer ${{ secrets.PAGES_ADMIN_TOKEN || secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages" \
+            -d '{"cname":"ev.42p.uk","https_enforced":true}' \
+            || echo "::warning::HTTPS not enforced yet (certificate may still be provisioning)."
