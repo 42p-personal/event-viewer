@@ -1,0 +1,63 @@
+name: Deploy web app to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - claude/ev-42p-subdomain-setup-1noe7b
+    paths:
+      - "web/**"
+      - "rules.json"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp -r web/* _site/
+          cp rules.json _site/rules.json
+          echo "ev.42p.uk" > _site/CNAME
+
+      - name: Enable and configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      # Actions-based Pages deployments ignore the CNAME file, so set the
+      # custom domain through the API. Non-fatal: if the token can't do it,
+      # set "ev.42p.uk" manually under Settings -> Pages -> Custom domain.
+      - name: Set custom domain (ev.42p.uk)
+        run: |
+          curl -sS -X PUT \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages" \
+            -d '{"cname":"ev.42p.uk"}' \
+            && echo "Custom domain set to ev.42p.uk" \
+            || echo "::warning::Could not set the custom domain automatically. Set 'ev.42p.uk' in Settings -> Pages."

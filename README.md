@@ -4,6 +4,28 @@ Windows desktop app that parses an exported Event Viewer log (`.evtx`), groups t
 errors and warnings into distinct issues, and shows plain-English explanations and
 fixes for the ones it recognises.
 
+## Web version — https://ev.42p.uk
+
+The same analyzer also runs as a static web app at **[ev.42p.uk](https://ev.42p.uk)**
+(source in [web/](web/)). It parses the `.evtx` binary format entirely in the
+browser — files are never uploaded — and uses the same [rules.json](rules.json)
+knowledge base. One limitation vs. the desktop app: rendering full event messages
+needs the provider's message DLLs, so the web version shows the raw event data
+fields instead (breakdowns, grouping and advice are identical).
+
+Hosting: deployed to GitHub Pages by
+[.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) on every
+push that touches `web/` or `rules.json`. The custom domain requires this DNS
+record on `42p.uk`:
+
+```
+ev.42p.uk.  CNAME  42p-personal.github.io.
+```
+
+GitHub Pages then serves the site at https://ev.42p.uk with a certificate and
+redirects both `http://ev.42p.uk` and the `*.github.io` URL to it ("Enforce HTTPS"
+in Settings → Pages).
+
 ## How it works
 
 - Parsing uses the built-in Windows Event Log API (`EventLogReader`) — no third-party
