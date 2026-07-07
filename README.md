@@ -13,18 +13,11 @@ knowledge base. One limitation vs. the desktop app: rendering full event message
 needs the provider's message DLLs, so the web version shows the raw event data
 fields instead (breakdowns, grouping and advice are identical).
 
-Hosting: deployed to GitHub Pages by
-[.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) on every
-push that touches `web/` or `rules.json`. The custom domain requires this DNS
-record on `42p.uk`:
-
-```
-ev.42p.uk.  CNAME  42p-personal.github.io.
-```
-
-GitHub Pages then serves the site at https://ev.42p.uk with a certificate and
-redirects both `http://ev.42p.uk` and the `*.github.io` URL to it ("Enforce HTTPS"
-in Settings → Pages).
+Hosting: a Cloudflare Pages project (`event-viewer`) connected to this GitHub
+repository. Every push to `main` triggers a build that runs
+`cp rules.json web/` and publishes the `web/` directory. The custom domain
+`ev.42p.uk` is attached to the project, with `ev.p42.uk` redirecting to it like
+every other p42 subdomain.
 
 ## How it works
 
