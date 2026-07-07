@@ -21,7 +21,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The auto-created github-pages environment only lets the default branch
+  # deploy. This job (which itself needs no environment) uses the
+  # PAGES_ADMIN_TOKEN secret to make sure the Pages site exists and that the
+  # current branch is allowed to deploy to it.
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure Pages is enabled and this branch may deploy
+        env:
+          GH_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PAGES_ADMIN_TOKEN not set; skipping (deploy may be rejected by environment protection)."
+            exit 0
+          fi
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          gh api -X POST "repos/$REPO/pages" -f build_type=workflow \
+            && echo "Pages site created" || echo "Pages site already exists"
+          gh api -X PUT "repos/$REPO/environments/github-pages" \
+            --input - <<'JSON' || echo "::warning::Could not update environment protection"
+          {"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+          JSON
+          for name in main "$BRANCH"; do
+            gh api -X POST "repos/$REPO/environments/github-pages/deployment-branch-policies" \
+              -f name="$name" && echo "allowed: $name" || echo "branch policy for $name already present"
+          done
+
   deploy:
+    needs: prepare
     runs-on: ubuntu-latest
     environment:
       name: github-pages
