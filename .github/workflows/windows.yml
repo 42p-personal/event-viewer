@@ -18,23 +18,29 @@ jobs:
       - name: Build desktop app
         run: dotnet publish EventLogAnalyzer.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
 
-      - name: Generate synthetic .evtx fixtures
-        run: |
-          mkdir fixtures
-          python tests/make_evtx.py fixtures
-
-      # Headless end-to-end: the real Windows Event Log API reads the synthetic
-      # file (checksums included), the analyzer runs, the report is checked.
+      # Headless end-to-end against a REAL .evtx: write known events into the
+      # runner's Application log, export just those with wevtutil, analyze.
       - name: Headless smoke test
         shell: pwsh
         run: |
+          mkdir fixtures
+          eventcreate /L APPLICATION /T ERROR /ID 999 /SO EVTest /D "synthetic test error one" | Out-Null
+          eventcreate /L APPLICATION /T ERROR /ID 999 /SO EVTest /D "synthetic test error two" | Out-Null
+          eventcreate /L APPLICATION /T WARNING /ID 998 /SO EVTest /D "synthetic test warning" | Out-Null
+          wevtutil epl Application fixtures\app.evtx "/q:*[System[Provider[@Name='EVTest']]]"
+
           $p = Start-Process -FilePath "publish/EventLogAnalyzer.exe" `
-            -ArgumentList "--report", "fixtures/system.evtx", "fixtures/report.txt" `
+            -ArgumentList "--report", "fixtures/app.evtx", "fixtures/report.txt" `
             -Wait -PassThru -NoNewWindow
           if ($p.ExitCode -ne 0) { Get-Content fixtures/report.txt; throw "headless run failed" }
           $report = Get-Content fixtures/report.txt -Raw
           Write-Host $report
-          foreach ($needle in @("Disk has a bad block", "Service crashed unexpectedly", "Print Spooler")) {
+          foreach ($needle in @(
+            "Total events: 3",
+            "Unrecognised error event from EVTest",
+            "Occurrences: 2",
+            "synthetic test error one",
+            "Unrecognised warning event from EVTest")) {
             if ($report -notmatch [regex]::Escape($needle)) { throw "report missing: $needle" }
           }
           "smoke test passed"
