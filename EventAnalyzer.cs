@@ -13,7 +13,9 @@ public static class EventAnalyzer
         if (!File.Exists(evtxPath))
             throw new FileNotFoundException($"File not found: {evtxPath}");
 
-        var groups = new Dictionary<(string Provider, int Id), Agg>();
+        // Key includes the matched rule's index so keyword (DataContains)
+        // rules split a provider+id into separate findings.
+        var groups = new Dictionary<(string Provider, int Id, int RuleIdx), Agg>();
         long total = 0, problems = 0;
 
         var query = new EventLogQuery(evtxPath, PathType.FilePath);
@@ -29,13 +31,19 @@ public static class EventAnalyzer
                     if (level is 0 or > 3) continue;
                     problems++;
 
-                    var key = (rec.ProviderName ?? "(unknown provider)", rec.Id);
+                    var provider = rec.ProviderName ?? "(unknown provider)";
+                    var props = SafeProps(rec);
+                    int ruleIdx = -1;
+                    for (int i = 0; i < rules.Count; i++)
+                        if (rules[i].Matches(provider, rec.Id, props)) { ruleIdx = i; break; }
+
+                    var key = (provider, rec.Id, ruleIdx);
                     if (!groups.TryGetValue(key, out var agg))
                     {
                         agg = new Agg
                         {
                             Level = level,
-                            Rule = rules.FirstOrDefault(r => r.Matches(key.Item1, key.Item2)),
+                            Rule = ruleIdx >= 0 ? rules[ruleIdx] : null,
                         };
                         groups[key] = agg;
                     }
@@ -56,7 +64,7 @@ public static class EventAnalyzer
         }
 
         var findings = new List<Finding>();
-        foreach (var ((provider, id), agg) in groups)
+        foreach (var ((provider, id, _), agg) in groups)
         {
             findings.Add(agg.Rule != null
                 ? new Finding
@@ -153,6 +161,18 @@ public static class EventAnalyzer
             },
             Samples = agg.Samples,
         };
+    }
+
+    static IReadOnlyList<string?> SafeProps(EventRecord rec)
+    {
+        try
+        {
+            return rec.Properties.Select(p => p.Value?.ToString()).ToList();
+        }
+        catch
+        {
+            return Array.Empty<string?>();
+        }
     }
 
     static string SafeMessage(EventRecord rec)

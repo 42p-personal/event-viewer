@@ -40,7 +40,12 @@
   },
   {
     "provider": "storahci",
-    "altProviders": ["stornvme", "iaStorA", "iaStorAC", "iaStorAVC"],
+    "altProviders": [
+      "stornvme",
+      "iaStorA",
+      "iaStorAC",
+      "iaStorAVC"
+    ],
     "eventId": 129,
     "severity": "high",
     "title": "Storage device reset (device stopped responding)",
@@ -54,7 +59,9 @@
   },
   {
     "provider": "Ntfs",
-    "altProviders": ["Microsoft-Windows-Ntfs"],
+    "altProviders": [
+      "Microsoft-Windows-Ntfs"
+    ],
     "eventId": 55,
     "severity": "critical",
     "title": "File system corruption detected",
@@ -105,7 +112,9 @@
   },
   {
     "provider": "Microsoft-Windows-WER-SystemErrorReporting",
-    "altProviders": ["BugCheck"],
+    "altProviders": [
+      "BugCheck"
+    ],
     "eventId": 1001,
     "severity": "critical",
     "title": "Windows crashed with a blue screen",
@@ -163,8 +172,14 @@
     "severity": "medium",
     "title": "A service failed to start",
     "breakdownProps": [
-      { "index": 0, "name": "Service" },
-      { "index": 1, "name": "Error" }
+      {
+        "index": 0,
+        "name": "Service"
+      },
+      {
+        "index": 1,
+        "name": "Error"
+      }
     ],
     "cause": "Windows couldn't start the service named in the message - missing files (often leftovers from uninstalled software), a bad logon account, or a failed dependency.",
     "solutions": [
@@ -179,7 +194,12 @@
     "eventId": 7009,
     "severity": "medium",
     "title": "Service start timed out",
-    "breakdownProps": [{ "index": 1, "name": "Service" }],
+    "breakdownProps": [
+      {
+        "index": 1,
+        "name": "Service"
+      }
+    ],
     "cause": "A service didn't respond within the startup timeout (default 30s) - usually boot-time disk congestion on slower drives, or a service waiting on the network.",
     "solutions": [
       "Set the affected service to 'Automatic (Delayed Start)' in services.msc.",
@@ -193,8 +213,14 @@
     "severity": "medium",
     "title": "Service stopped with an error",
     "breakdownProps": [
-      { "index": 0, "name": "Service" },
-      { "index": 1, "name": "Error" }
+      {
+        "index": 0,
+        "name": "Service"
+      },
+      {
+        "index": 1,
+        "name": "Error"
+      }
     ],
     "cause": "The service named in the message shut itself down and reported an error code. The error text in the message usually says why.",
     "solutions": [
@@ -208,7 +234,12 @@
     "eventId": 7031,
     "severity": "high",
     "title": "Service crashed unexpectedly",
-    "breakdownProps": [{ "index": 0, "name": "Service" }],
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Service"
+      }
+    ],
     "cause": "The service terminated without being asked to and Windows applied its recovery action (usually a restart). The service's own process crashed.",
     "solutions": [
       "Check the Application log for an 'Application Error 1000' entry at the same time - it names the faulting module.",
@@ -221,7 +252,12 @@
     "eventId": 7034,
     "severity": "high",
     "title": "Service crashed (recovery exhausted)",
-    "breakdownProps": [{ "index": 0, "name": "Service" }],
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Service"
+      }
+    ],
     "cause": "The service crashed and Windows has stopped trying to restart it - it is now down until manually started or the machine reboots.",
     "solutions": [
       "Check the Application log for a matching 'Application Error 1000' entry naming the faulting module.",
@@ -232,11 +268,39 @@
   {
     "provider": "Application Error",
     "eventId": 1000,
+    "dataContains": [
+      "ntdll.dll"
+    ],
+    "severity": "high",
+    "title": "Application crash inside ntdll.dll (heap corruption pattern)",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Faulting application"
+      }
+    ],
+    "cause": "The faulting module is ntdll.dll - a core Windows library. The library itself is almost never the culprit; crashes here usually mean the application corrupted its own memory (heap corruption), or a misbehaving third-party DLL/driver injected into the process did. Multiple different apps crashing in ntdll.dll can also point at bad RAM.",
+    "solutions": [
+      "Update the crashing application first - heap-corruption bugs get fixed in newer versions.",
+      "Uninstall or update software that injects into other processes: overlays, antivirus, mouse/keyboard tweak tools.",
+      "If several unrelated applications crash in ntdll.dll, test the RAM (Windows Memory Diagnostic or MemTest86).",
+      "Check for the same crash with a clean boot (msconfig > selective startup) to rule out third-party services."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
     "severity": "high",
     "title": "Application crash",
     "breakdownProps": [
-      { "index": 0, "name": "Faulting application" },
-      { "index": 3, "name": "Faulting module" }
+      {
+        "index": 0,
+        "name": "Faulting application"
+      },
+      {
+        "index": 3,
+        "name": "Faulting module"
+      }
     ],
     "cause": "A program crashed. The message names the faulting application and the faulting module - the module is the better clue (the app may be a victim of a bad DLL or driver).",
     "solutions": [
@@ -251,7 +315,12 @@
     "eventId": 1002,
     "severity": "medium",
     "title": "Application stopped responding",
-    "breakdownProps": [{ "index": 0, "name": "Program" }],
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Program"
+      }
+    ],
     "cause": "A program froze and was terminated (or waited out). One-offs are usually harmless; a pattern points at the app, a slow/failing disk it was waiting on, or a driver.",
     "solutions": [
       "Update the application named in the message.",
@@ -275,7 +344,7 @@
   {
     "provider": "Microsoft-Windows-DistributedCOM",
     "eventId": 10016,
-    "severity": "info",
+    "severity": "noise",
     "title": "DCOM permission mismatch (safe to ignore)",
     "cause": "A process requested a DCOM activation permission it doesn't have. Microsoft's official guidance: these are by design, do not affect functionality, and can be ignored.",
     "solutions": [
@@ -286,7 +355,7 @@
   {
     "provider": "Microsoft-Windows-DistributedCOM",
     "eventId": 10010,
-    "severity": "low",
+    "severity": "noise",
     "title": "DCOM server did not register in time",
     "cause": "A COM server didn't register within the timeout - common during shutdown, right after Windows updates, or when a background app is slow to start. Usually harmless noise.",
     "solutions": [
@@ -296,11 +365,20 @@
   },
   {
     "provider": "Display",
-    "altProviders": ["nvlddmkm", "amdkmdag", "igfx"],
+    "altProviders": [
+      "nvlddmkm",
+      "amdkmdag",
+      "igfx"
+    ],
     "eventId": 4101,
     "severity": "high",
     "title": "Display driver stopped responding and recovered (TDR)",
-    "breakdownProps": [{ "index": 0, "name": "Driver" }],
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Driver"
+      }
+    ],
     "cause": "The GPU driver hung and Windows reset it (screen goes black for a couple of seconds). Causes: buggy GPU driver, overheating, unstable GPU overclock or undervolt, or a failing card.",
     "solutions": [
       "Clean-install the latest GPU driver: remove the old one with DDU (Display Driver Uninstaller) in safe mode first.",
@@ -347,7 +425,9 @@
   },
   {
     "provider": "NETLOGON",
-    "altProviders": ["Netlogon"],
+    "altProviders": [
+      "Netlogon"
+    ],
     "eventId": 5719,
     "severity": "medium",
     "title": "No domain controller could be reached",
@@ -409,6 +489,100 @@
       "If performance is noticeably poor: check cooling (dust, fans) and CPU temperatures.",
       "Set the power plan to Balanced/High performance and check BIOS settings for power limits.",
       "Update the BIOS - some vendors have shipped fixes for over-aggressive throttling."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Time-Service",
+    "eventId": 134,
+    "severity": "noise",
+    "title": "Time sync failed (no network at the time)",
+    "cause": "Windows couldn't reach the NTP time server, usually because the machine was booting, sleeping, or briefly offline. It retries automatically and the clock re-syncs.",
+    "solutions": [
+      "Ignore occasional entries - the next sync succeeds.",
+      "If the clock actually drifts, run 'w32tm /resync' and check internet/firewall access to time.windows.com."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Windows Defender",
+    "altProviders": [
+      "Windows Defender"
+    ],
+    "eventId": 1116,
+    "severity": "high",
+    "title": "Windows Defender detected malware",
+    "cause": "Defender's real-time protection found malware or a potentially unwanted program on this machine. A follow-up event 1117 normally records the action taken (quarantine/remove).",
+    "solutions": [
+      "Open Windows Security > Protection history to see what was found and what was done about it.",
+      "Run a Full scan (not Quick) to check for anything related.",
+      "If detections repeat for the same item, note the file path - something keeps re-dropping it; investigate that program.",
+      "For a suspected false positive, check the detection name on Microsoft's security intelligence site before restoring anything."
+    ]
+  },
+  {
+    "provider": "Perflib",
+    "altProviders": [
+      "Microsoft-Windows-Perflib"
+    ],
+    "eventId": 1008,
+    "severity": "noise",
+    "title": "Performance counter DLL failed to load",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Service"
+      }
+    ],
+    "cause": "A performance-counter extension for a service failed to open. This only affects Performance Monitor statistics for that service - it does not affect the service itself. Extremely common and almost always harmless.",
+    "solutions": [
+      "Ignore it unless you actively use Performance Monitor counters for the named service.",
+      "If you need those counters, rebuild them from an elevated prompt: 'lodctr /R' then 'winmgmt /resyncperf'."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-User Profiles Service",
+    "eventId": 1530,
+    "severity": "noise",
+    "title": "Registry handles left open at sign-out",
+    "cause": "A program or service kept the user registry hive open while the user signed out; Windows force-closed the handles. Logged by design - the OS cleans this up itself.",
+    "solutions": [
+      "Ignore it - this is informational housekeeping.",
+      "If sign-out is actually slow, the event data names the process holding the handle; update that software."
+    ]
+  },
+  {
+    "provider": "Schannel",
+    "eventId": 36887,
+    "severity": "low",
+    "title": "TLS fatal alert received from a remote server",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Alert code"
+      }
+    ],
+    "cause": "A remote server ended a TLS handshake with a fatal alert. Usually a server-side certificate/protocol mismatch, or software on this machine offering an outdated protocol. Alert 40 = handshake failure, 46 = certificate unknown, 70 = protocol version.",
+    "solutions": [
+      "Ignore occasional entries - transient server-side issues cause them.",
+      "If frequent, note which times they occur and what software runs then (browsers, mail clients, update agents).",
+      "Update the software making the connections; old apps offering TLS 1.0/1.1 trigger alert 70 against modern servers."
+    ]
+  },
+  {
+    "provider": "Application Popup",
+    "eventId": 26,
+    "severity": "low",
+    "title": "A program showed an error popup",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Window caption"
+      }
+    ],
+    "cause": "Windows recorded a message box shown to the user - the caption and text are in the event data. This is a symptom record; the interesting part is which program raised it.",
+    "solutions": [
+      "Read the caption/message in the sample data below - it usually names the failing program directly.",
+      "Update or reinstall that program.",
+      "If it appears at every boot, check Task Manager > Startup for the offending entry."
     ]
   }
 ]

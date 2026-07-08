@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check web scripts
+        run: for f in web/*.js; do node --check "$f"; done
+
+      - name: Validate rules.json
+        run: python3 -c "import json; json.load(open('rules.json'))"
+
+      - name: Generate synthetic .evtx fixtures
+        run: mkdir -p /tmp/evtx && python3 tests/make_evtx.py /tmp/evtx
+
+      - name: Run parser + analyzer tests
+        run: node tests/test_parser.js /tmp/evtx

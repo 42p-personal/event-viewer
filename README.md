@@ -13,6 +13,22 @@ knowledge base. One limitation vs. the desktop app: rendering full event message
 needs the provider's message DLLs, so the web version shows the raw event data
 fields instead (breakdowns, grouping and advice are identical).
 
+The web version additionally:
+
+- accepts **multiple `.evtx` files at once** (drop System + Application together)
+  and tags each finding with the log it came from;
+- detects **unexpected shutdowns and blue screens** (Kernel-Power 41,
+  EventLog 6008, BugCheck 1001), counts boot sessions, and shows the errors
+  logged in the minutes *before* each crash;
+- draws a **severity timeline** so error storms and "it started last Tuesday"
+  patterns are visible at a glance;
+- parses in a **Web Worker**, streaming the file in 4 MB slices, so huge logs
+  don't freeze the page or need one giant memory allocation.
+
+Tests live in [tests/](tests/): `make_evtx.py` writes synthetic `.evtx` files
+(binary XML with templates and substitutions) and `test_parser.js` runs the real
+parser + analyzer against them; CI runs both on every push and pull request.
+
 Hosting: a Cloudflare Pages project (`event-viewer`) connected to this GitHub
 repository. Every push to `main` triggers a build that runs
 `cp rules.json web/` and publishes the `web/` directory. The custom domain
@@ -74,13 +90,21 @@ Add entries to `rules.json` (it's copied next to the exe at build time):
   "provider": "Provider name as shown in the grid",
   "altProviders": ["optional", "aliases"],
   "eventId": 123,
-  "severity": "critical | high | medium | low | info",
+  "dataContains": ["optional keyword"],
+  "severity": "critical | high | medium | low | info | noise",
   "title": "Short issue name",
   "cause": "What it means in plain English.",
   "solutions": ["Step 1", "Step 2"],
   "breakdownProps": [{ "index": 0, "name": "Service" }]
 }
 ```
+
+Severity `noise` is for events that are technically warnings but almost always
+harmless (DCOM 10016, Perflib counters, ...) — they sort to the bottom and are
+visually de-emphasised. `dataContains` makes a rule match only when an event's
+data contains one of the keywords (case-insensitive) — rules are evaluated in
+file order and the first match wins, so put keyword rules *before* the generic
+rule for the same provider/event ID.
 
 `breakdownProps` is optional: it names positions in the event's data properties
 that identify the culprit (faulting app, service name, driver, ...). When set,

@@ -470,61 +470,93 @@
     return rec;
   }
 
-  // Parse the whole file. onRecord(rec) is called per error/warning record;
-  // returns {totalEvents, parseErrors}.
-  // options.onProgress(fractionDone) is called between chunks.
+  // Parse one 64 KiB chunk. view/chunkBytes must be aligned to the chunk start.
+  function parseChunk(view, chunkBytes, onRecord, stats) {
+    const csig = decodeAnsi(chunkBytes.subarray(0, 7));
+    if (csig !== 'ElfChnk') return;
+
+    const freeSpaceOffset = view.getUint32(0x30, true);
+    const limit = Math.min(freeSpaceOffset || CHUNK_SIZE, CHUNK_SIZE);
+    const parser = new BinXmlParser(view, new Map());
+
+    let pos = 0x200;
+    while (pos + 24 <= limit) {
+      // record signature 2a 2a 00 00
+      if (!(chunkBytes[pos] === 0x2a && chunkBytes[pos + 1] === 0x2a && chunkBytes[pos + 2] === 0 && chunkBytes[pos + 3] === 0)) break;
+      const size = view.getUint32(pos + 4, true);
+      if (size < 28 || pos + size > CHUNK_SIZE) break;
+      const written = filetimeToDate(view.getBigUint64(pos + 16, true));
+      stats.totalEvents++;
+      try {
+        const cur = new Cursor(view, pos + 24);
+        const nodes = parser.parseFragment(cur, pos + size - 4);
+        const root = nodes.length === 1 ? nodes[0] : { name: '', attrs: {}, children: nodes, text: '' };
+        const rec = extractRecord(root, written);
+        if (rec) onRecord(rec);
+        else stats.parseErrors++;
+      } catch (e) {
+        stats.parseErrors++;
+      }
+      pos += size;
+    }
+  }
+
+  function checkFileHeader(bytes) {
+    if (bytes.length < 8 || decodeAnsi(bytes.subarray(0, 7)) !== 'ElfFile')
+      throw new Error('Not an .evtx file (missing ElfFile signature).');
+  }
+
+  // Parse a whole file held in memory. onRecord(rec) per decoded record;
+  // returns {totalEvents, parseErrors}. options.onProgress(fraction).
   async function parseEvtx(arrayBuffer, onRecord, options = {}) {
     const fileBytes = new Uint8Array(arrayBuffer);
     if (fileBytes.length < FILE_HEADER_SIZE) throw new Error('File is too small to be an .evtx file.');
-    const sig = decodeAnsi(fileBytes.subarray(0, 7));
-    if (sig !== 'ElfFile') throw new Error('Not an .evtx file (missing ElfFile signature).');
+    checkFileHeader(fileBytes);
 
-    let total = 0;
-    let parseErrors = 0;
+    const stats = { totalEvents: 0, parseErrors: 0 };
     const nChunks = Math.floor((fileBytes.length - FILE_HEADER_SIZE) / CHUNK_SIZE);
-
     for (let ci = 0; ci < nChunks; ci++) {
       const chunkStart = FILE_HEADER_SIZE + ci * CHUNK_SIZE;
-      const chunkBytes = fileBytes.subarray(chunkStart, chunkStart + CHUNK_SIZE);
-      const csig = decodeAnsi(chunkBytes.subarray(0, 7));
-      if (csig !== 'ElfChnk') continue;
-
-      const view = new DataView(arrayBuffer, chunkStart, CHUNK_SIZE);
-      const freeSpaceOffset = view.getUint32(0x30, true);
-      const limit = Math.min(freeSpaceOffset || CHUNK_SIZE, CHUNK_SIZE);
-      const parser = new BinXmlParser(view, new Map());
-
-      let pos = 0x200;
-      while (pos + 24 <= limit) {
-        // record signature 2a 2a 00 00
-        if (!(chunkBytes[pos] === 0x2a && chunkBytes[pos + 1] === 0x2a && chunkBytes[pos + 2] === 0 && chunkBytes[pos + 3] === 0)) break;
-        const size = view.getUint32(pos + 4, true);
-        if (size < 28 || pos + size > CHUNK_SIZE) break;
-        const written = filetimeToDate(view.getBigUint64(pos + 16, true));
-        total++;
-        try {
-          const cur = new Cursor(view, pos + 24);
-          const nodes = parser.parseFragment(cur, pos + size - 4);
-          const root = nodes.length === 1 ? nodes[0] : { name: '', attrs: {}, children: nodes, text: '' };
-          const rec = extractRecord(root, written);
-          if (rec) onRecord(rec);
-          else parseErrors++;
-        } catch (e) {
-          parseErrors++;
-        }
-        pos += size;
-      }
-
+      parseChunk(
+        new DataView(arrayBuffer, chunkStart, CHUNK_SIZE),
+        fileBytes.subarray(chunkStart, chunkStart + CHUNK_SIZE),
+        onRecord, stats);
       if (options.onProgress && (ci & 15) === 0) {
         options.onProgress((ci + 1) / nChunks);
-        await new Promise((r) => setTimeout(r, 0)); // yield to UI
+        await new Promise((r) => setTimeout(r, 0));
       }
     }
     if (options.onProgress) options.onProgress(1);
-    return { totalEvents: total, parseErrors };
+    return stats;
   }
 
-  const api = { parseEvtx };
+  // Parse a File/Blob incrementally via slice() so huge logs never need one
+  // giant ArrayBuffer. Reads 4 MiB (64 chunks) at a time.
+  const SLICE_CHUNKS = 64;
+  async function parseEvtxFile(file, onRecord, options = {}) {
+    if (file.size < FILE_HEADER_SIZE) throw new Error('File is too small to be an .evtx file.');
+    checkFileHeader(new Uint8Array(await file.slice(0, FILE_HEADER_SIZE).arrayBuffer()));
+
+    const stats = { totalEvents: 0, parseErrors: 0 };
+    const groupSize = SLICE_CHUNKS * CHUNK_SIZE;
+    for (let off = FILE_HEADER_SIZE; off + CHUNK_SIZE <= file.size; off += groupSize) {
+      const end = Math.min(off + groupSize, file.size);
+      const buf = await file.slice(off, end).arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      const nChunks = Math.floor(bytes.length / CHUNK_SIZE);
+      for (let ci = 0; ci < nChunks; ci++) {
+        parseChunk(
+          new DataView(buf, ci * CHUNK_SIZE, CHUNK_SIZE),
+          bytes.subarray(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE),
+          onRecord, stats);
+      }
+      if (options.onProgress) options.onProgress(Math.min(end / file.size, 1));
+    }
+    if (options.onProgress) options.onProgress(1);
+    return stats;
+  }
+
+  const api = { parseEvtx, parseEvtxFile };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.Evtx = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -218,6 +218,7 @@ public class MainForm : Form
         "high" => Color.FromArgb(255, 228, 200),
         "medium" => Color.FromArgb(255, 249, 196),
         "low" => Color.FromArgb(226, 240, 255),
+        "noise" => Color.FromArgb(241, 241, 240),
         _ => Color.FromArgb(235, 235, 235),
     };
 }
