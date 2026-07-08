@@ -2,135 +2,299 @@ using System.Diagnostics.Eventing.Reader;
 
 namespace EventLogAnalyzer;
 
+/// <summary>An input to analyze: an .evtx file or a live channel on this PC.</summary>
+public sealed record LogSource(string Path, PathType Type, TimeSpan? MaxAge = null)
+{
+    public string Display => Type == PathType.LogName ? $"{Path} (this PC)" : System.IO.Path.GetFileName(Path);
+}
+
 public static class EventAnalyzer
 {
-    const int MaxSamples = 3;          // distinct rendered messages kept per issue
-    const int MaxSampleAttempts = 10;  // rendering is slow - don't chase distinct samples forever
-    const int MaxBreakdownKeys = 200;  // distinct culprit values tracked per issue
+    const int MaxSamples = 3;            // distinct rendered messages kept per issue
+    const int MaxSampleAttempts = 10;    // rendering is slow - don't chase distinct samples forever
+    const int MaxBreakdownKeys = 200;    // distinct culprit values tracked per issue
+    const int TimelineCap = 500_000;     // timestamps kept for the histogram
+    const int ContextMaxEntries = 400;   // rolling pre-crash buffer per source
+    static readonly TimeSpan ContextMaxAge = TimeSpan.FromMinutes(10);
+    static readonly TimeSpan ContextWindow = TimeSpan.FromMinutes(3);
+    const int ContextShown = 25;         // max events per crash card
+    static readonly TimeSpan CrashMerge = TimeSpan.FromMinutes(5);
+    // Markers are logged at the boot AFTER the crash; events closer than this
+    // to the marker belong to the new boot, not the crash.
+    static readonly TimeSpan CrashGap = TimeSpan.FromSeconds(20);
+
+    static readonly (string Provider, int Id, string Cause)[] CrashMarkers =
+    {
+        ("microsoft-windows-kernel-power", 41, "Unexpected loss of power or hard reset (Kernel-Power 41)"),
+        ("eventlog", 6008, "Unexpected shutdown (EventLog 6008)"),
+        ("microsoft-windows-wer-systemerrorreporting", 1001, "Blue screen / bugcheck (Event 1001)"),
+        ("bugcheck", 1001, "Blue screen / bugcheck (Event 1001)"),
+    };
 
     public static AnalysisResult Analyze(string evtxPath, IReadOnlyList<Rule> rules)
     {
         if (!File.Exists(evtxPath))
             throw new FileNotFoundException($"File not found: {evtxPath}");
+        return Analyze(new[] { new LogSource(evtxPath, PathType.FilePath) }, rules);
+    }
 
-        // Key includes the matched rule's index so keyword (DataContains)
-        // rules split a provider+id into separate findings.
-        var groups = new Dictionary<(string Provider, int Id, int RuleIdx), Agg>();
-        long total = 0, problems = 0;
+    public static AnalysisResult Analyze(IReadOnlyList<LogSource> sources, IReadOnlyList<Rule> rules)
+    {
+        var state = new State(rules);
 
-        var query = new EventLogQuery(evtxPath, PathType.FilePath);
-        using (var reader = new EventLogReader(query))
+        foreach (var src in sources)
         {
-            for (EventRecord? rec = reader.ReadEvent(); rec != null; rec = reader.ReadEvent())
+            try
             {
-                using (rec)
+                string? xpath = src.MaxAge is { } age
+                    ? $"*[System[TimeCreated[timediff(@SystemTime) <= {(long)age.TotalMilliseconds}]]]"
+                    : null;
+                var query = new EventLogQuery(src.Path, src.Type, xpath);
+                using var reader = new EventLogReader(query);
+                for (EventRecord? rec = reader.ReadEvent(); rec != null; rec = reader.ReadEvent())
                 {
-                    total++;
-                    // Level: 1=Critical, 2=Error, 3=Warning, 4=Info, 0=LogAlways
-                    byte level = rec.Level ?? 4;
-                    if (level is 0 or > 3) continue;
-                    problems++;
-
-                    var provider = rec.ProviderName ?? "(unknown provider)";
-                    var props = SafeProps(rec);
-                    int ruleIdx = -1;
-                    for (int i = 0; i < rules.Count; i++)
-                        if (rules[i].Matches(provider, rec.Id, props)) { ruleIdx = i; break; }
-
-                    var key = (provider, rec.Id, ruleIdx);
-                    if (!groups.TryGetValue(key, out var agg))
-                    {
-                        agg = new Agg
-                        {
-                            Level = level,
-                            Rule = ruleIdx >= 0 ? rules[ruleIdx] : null,
-                        };
-                        groups[key] = agg;
-                    }
-                    agg.Count++;
-                    if (level < agg.Level) agg.Level = level;
-
-                    var t = rec.TimeCreated;
-                    if (t.HasValue)
-                    {
-                        if (agg.First == null || t < agg.First) agg.First = t;
-                        if (agg.Last == null || t > agg.Last) agg.Last = t;
-                    }
-
-                    CollectSample(rec, agg);
-                    CollectBreakdown(rec, agg);
+                    using (rec) state.OnRecord(rec, src);
                 }
+            }
+            catch (Exception ex) when (ex is EventLogException or UnauthorizedAccessException or IOException)
+            {
+                state.Result.SourceErrors.Add($"{src.Display}: {ex.Message}");
             }
         }
 
-        var findings = new List<Finding>();
-        foreach (var ((provider, id, _), agg) in groups)
+        return state.Finish();
+    }
+
+    sealed class State
+    {
+        public readonly AnalysisResult Result = new();
+        readonly IReadOnlyList<Rule> _rules;
+        readonly Dictionary<int, List<int>> _rulesById = new();
+        readonly Dictionary<(string Provider, int Id, int RuleIdx), Agg> _groups = new();
+        readonly List<(long Ms, byte Level)> _timeline = new();
+        readonly Dictionary<string, List<CrashContextEvent>> _buffers = new();
+        long _total, _problems;
+        int _timelineDropped;
+
+        public State(IReadOnlyList<Rule> rules)
         {
-            findings.Add(agg.Rule != null
-                ? new Finding
+            _rules = rules;
+            for (int i = 0; i < rules.Count; i++)
+            {
+                if (!_rulesById.TryGetValue(rules[i].EventId, out var list))
+                    _rulesById[rules[i].EventId] = list = new List<int>();
+                list.Add(i);
+            }
+        }
+
+        public void OnRecord(EventRecord rec, LogSource src)
+        {
+            _total++;
+            var provider = rec.ProviderName ?? "(unknown provider)";
+            var time = rec.TimeCreated;
+
+            // Boot session boundary: "The Event log service was started."
+            if (rec.Id == 6005 && provider.Equals("EventLog", StringComparison.OrdinalIgnoreCase))
+                Result.BootSessions++;
+
+            if (time.HasValue && rec.Id is 41 or 6008 or 1001)
+            {
+                foreach (var m in CrashMarkers)
                 {
-                    Recognised = true,
-                    Severity = agg.Rule.Severity,
-                    Provider = provider,
-                    EventId = id,
-                    Count = agg.Count,
-                    FirstSeen = agg.First?.ToLocalTime(),
-                    LastSeen = agg.Last?.ToLocalTime(),
-                    Title = agg.Rule.Title,
-                    Cause = agg.Rule.Cause,
-                    Solutions = agg.Rule.Solutions,
-                    Breakdown = agg.SortedBreakdown(),
-                    BreakdownLabel = agg.Rule.BreakdownProps != null
-                        ? string.Join(" / ", agg.Rule.BreakdownProps.Select(p => p.Name))
-                        : "",
-                    BreakdownOverflow = agg.BreakdownOverflow,
-                    Samples = agg.Samples,
+                    if (m.Id == rec.Id && provider.Equals(m.Provider, StringComparison.OrdinalIgnoreCase))
+                    {
+                        RecordCrash(m.Cause, m.Id, rec, src, time.Value.ToLocalTime());
+                        break;
+                    }
                 }
-                : MakeUnknownFinding(provider, id, agg));
+            }
+
+            // Level: 1=Critical, 2=Error, 3=Warning, 4=Info, 0=LogAlways
+            byte level = rec.Level ?? 4;
+            if (level is 0 or > 3) return; // info-level records: markers only
+            _problems++;
+
+            var props = SafeProps(rec);
+
+            if (time.HasValue)
+            {
+                var local = time.Value.ToLocalTime();
+                if (_timeline.Count < TimelineCap)
+                    _timeline.Add((new DateTimeOffset(local).ToUnixTimeMilliseconds(), level));
+                else
+                    _timelineDropped++;
+
+                var buf = BufferFor(src.Path);
+                buf.Add(new CrashContextEvent
+                {
+                    Time = local, Level = level, Provider = provider, EventId = rec.Id,
+                    Summary = ShortSummary(props),
+                });
+                if (buf.Count > ContextMaxEntries) buf.RemoveRange(0, buf.Count - ContextMaxEntries);
+                while (buf.Count > 0 && buf[0].Time < local - ContextMaxAge) buf.RemoveAt(0);
+            }
+
+            int ruleIdx = -1;
+            if (_rulesById.TryGetValue(rec.Id, out var candidates))
+            {
+                foreach (var i in candidates)
+                {
+                    if (_rules[i].Matches(provider, rec.Id, props)) { ruleIdx = i; break; }
+                }
+            }
+
+            var key = (provider, rec.Id, ruleIdx);
+            if (!_groups.TryGetValue(key, out var agg))
+            {
+                agg = new Agg { Level = level, Rule = ruleIdx >= 0 ? _rules[ruleIdx] : null };
+                _groups[key] = agg;
+            }
+            agg.Count++;
+            if (level < agg.Level) agg.Level = level;
+            agg.Channels.Add(SafeChannel(rec) ?? src.Display);
+
+            if (time.HasValue)
+            {
+                var t = time.Value;
+                if (agg.First == null || t < agg.First) agg.First = t;
+                if (agg.Last == null || t > agg.Last) agg.Last = t;
+            }
+
+            CollectSample(rec, agg);
+            CollectBreakdown(props, agg);
         }
 
-        findings.Sort((a, b) =>
+        void RecordCrash(string cause, int markerId, EventRecord rec, LogSource src, DateTime t)
         {
-            int c = a.SeverityRank.CompareTo(b.SeverityRank);
-            return c != 0 ? c : b.Count.CompareTo(a.Count);
-        });
+            var bugcheck = "";
+            if (markerId == 1001)
+            {
+                var p = SafeProps(rec);
+                if (p.Count > 0) bugcheck = (p[0] ?? "").Trim();
+            }
 
-        return new AnalysisResult { TotalEvents = total, ProblemEvents = problems, Findings = findings };
-    }
+            var existing = Result.Crashes.FirstOrDefault(c =>
+                (c.Time - t).Duration() < CrashMerge && c.Channel == (SafeChannel(rec) ?? src.Display));
+            if (existing != null)
+            {
+                if (!existing.Causes.Contains(cause)) existing.Causes.Add(cause);
+                if (bugcheck.Length > 0 && existing.Bugcheck.Length == 0) existing.Bugcheck = bugcheck;
+                return;
+            }
 
-    static void CollectSample(EventRecord rec, Agg agg)
-    {
-        if (agg.Samples.Count >= MaxSamples || agg.SampleAttempts >= MaxSampleAttempts) return;
-        agg.SampleAttempts++;
-        var msg = SafeMessage(rec);
-        if (!string.IsNullOrWhiteSpace(msg) && !agg.Samples.Contains(msg))
-            agg.Samples.Add(msg);
-    }
+            var crash = new CrashReport { Time = t, Bugcheck = bugcheck, Channel = SafeChannel(rec) ?? src.Display };
+            crash.Causes.Add(cause);
 
-    static void CollectBreakdown(EventRecord rec, Agg agg)
-    {
-        var props = agg.Rule?.BreakdownProps;
-        if (props == null || props.Length == 0) return;
-
-        string key;
-        try
-        {
-            key = string.Join(" / ", props.Select(p =>
-                p.Index < rec.Properties.Count
-                    ? rec.Properties[p.Index].Value?.ToString() ?? "?"
-                    : "?"));
-        }
-        catch
-        {
-            key = "?";
+            var buf = BufferFor(src.Path);
+            var eligible = buf.Where(e => e.Time <= t - CrashGap).ToList();
+            if (eligible.Count > 0)
+            {
+                var tail = eligible[^1].Time;
+                crash.Events.AddRange(eligible.Where(e => e.Time >= tail - ContextWindow).TakeLast(ContextShown));
+            }
+            Result.Crashes.Add(crash);
         }
 
-        if (agg.Breakdown.TryGetValue(key, out var count))
-            agg.Breakdown[key] = count + 1;
-        else if (agg.Breakdown.Count < MaxBreakdownKeys)
-            agg.Breakdown[key] = 1;
-        else
-            agg.BreakdownOverflow++;
+        List<CrashContextEvent> BufferFor(string source)
+        {
+            if (!_buffers.TryGetValue(source, out var b)) _buffers[source] = b = new List<CrashContextEvent>();
+            return b;
+        }
+
+        public AnalysisResult Finish()
+        {
+            foreach (var ((provider, id, _), agg) in _groups)
+            {
+                var finding = agg.Rule != null
+                    ? new Finding
+                    {
+                        Recognised = true,
+                        Severity = agg.Rule.Severity,
+                        Provider = provider,
+                        EventId = id,
+                        Count = agg.Count,
+                        FirstSeen = agg.First?.ToLocalTime(),
+                        LastSeen = agg.Last?.ToLocalTime(),
+                        Title = agg.Rule.Title,
+                        Cause = agg.Rule.Cause,
+                        Solutions = agg.Rule.Solutions,
+                        Breakdown = agg.SortedBreakdown(),
+                        BreakdownLabel = agg.Rule.BreakdownProps != null
+                            ? string.Join(" / ", agg.Rule.BreakdownProps.Select(p => p.Name))
+                            : "",
+                        BreakdownOverflow = agg.BreakdownOverflow,
+                        Samples = agg.Samples,
+                    }
+                    : MakeUnknownFinding(provider, id, agg);
+                finding.Channels = agg.Channels.OrderBy(c => c).ToList();
+                Result.Findings.Add(finding);
+            }
+
+            Result.Findings.Sort((a, b) =>
+            {
+                int c = a.SeverityRank.CompareTo(b.SeverityRank);
+                return c != 0 ? c : b.Count.CompareTo(a.Count);
+            });
+
+            Result.Crashes.Sort((a, b) => b.Time.CompareTo(a.Time));
+            Result.TotalEvents = _total;
+            Result.ProblemEvents = _problems;
+            Result.Timeline = BuildTimeline();
+            return Result;
+        }
+
+        TimelineData? BuildTimeline()
+        {
+            if (_timeline.Count == 0) return null;
+            long min = long.MaxValue, max = long.MinValue;
+            foreach (var (ms, _) in _timeline)
+            {
+                if (ms < min) min = ms;
+                if (ms > max) max = ms;
+            }
+            long range = Math.Max(max - min, 1);
+            long bucketMs = Math.Max(60_000, (long)Math.Ceiling(range / 100.0));
+            int nBuckets = (int)(range / bucketMs) + 1;
+
+            var tl = new TimelineData
+            {
+                Start = DateTimeOffset.FromUnixTimeMilliseconds(min).LocalDateTime,
+                Bucket = TimeSpan.FromMilliseconds(bucketMs),
+                Dropped = _timelineDropped,
+            };
+            for (int i = 0; i < nBuckets; i++) tl.Buckets.Add(new TimelinePoint());
+            foreach (var (ms, level) in _timeline)
+            {
+                var b = tl.Buckets[(int)Math.Min((ms - min) / bucketMs, nBuckets - 1)];
+                if (level == 1) b.Critical++;
+                else if (level == 2) b.Error++;
+                else b.Warning++;
+            }
+            return tl;
+        }
+
+        void CollectSample(EventRecord rec, Agg agg)
+        {
+            if (agg.Samples.Count >= MaxSamples || agg.SampleAttempts >= MaxSampleAttempts) return;
+            agg.SampleAttempts++;
+            var msg = SafeMessage(rec);
+            if (!string.IsNullOrWhiteSpace(msg) && !agg.Samples.Contains(msg))
+                agg.Samples.Add(msg);
+        }
+
+        void CollectBreakdown(IReadOnlyList<string?> props, Agg agg)
+        {
+            var bd = agg.Rule?.BreakdownProps;
+            if (bd == null || bd.Length == 0) return;
+
+            var key = string.Join(" / ", bd.Select(p => p.Index < props.Count ? props[p.Index] ?? "?" : "?"));
+            if (agg.Breakdown.TryGetValue(key, out var count))
+                agg.Breakdown[key] = count + 1;
+            else if (agg.Breakdown.Count < MaxBreakdownKeys)
+                agg.Breakdown[key] = 1;
+            else
+                agg.BreakdownOverflow++;
+        }
     }
 
     static Finding MakeUnknownFinding(string provider, int id, Agg agg)
@@ -163,6 +327,12 @@ public static class EventAnalyzer
         };
     }
 
+    static string ShortSummary(IReadOnlyList<string?> props)
+    {
+        var s = string.Join(" | ", props.Where(v => !string.IsNullOrWhiteSpace(v)));
+        return s.Length > 140 ? s[..137] + "..." : s;
+    }
+
     static IReadOnlyList<string?> SafeProps(EventRecord rec)
     {
         try
@@ -173,6 +343,12 @@ public static class EventAnalyzer
         {
             return Array.Empty<string?>();
         }
+    }
+
+    static string? SafeChannel(EventRecord rec)
+    {
+        try { return string.IsNullOrWhiteSpace(rec.LogName) ? null : rec.LogName; }
+        catch { return null; }
     }
 
     static string SafeMessage(EventRecord rec)
@@ -207,6 +383,7 @@ public static class EventAnalyzer
         public int SampleAttempts;
         public Dictionary<string, int> Breakdown = new();
         public int BreakdownOverflow;
+        public HashSet<string> Channels = new(StringComparer.OrdinalIgnoreCase);
 
         public List<(string, int)> SortedBreakdown() =>
             Breakdown.OrderByDescending(kv => kv.Value).Select(kv => (kv.Key, kv.Value)).ToList();

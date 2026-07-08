@@ -1,0 +1,51 @@
+name: Windows build
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build desktop app
+        run: dotnet publish EventLogAnalyzer.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+
+      # Headless end-to-end against a REAL .evtx: write known events into the
+      # runner's Application log, export just those with wevtutil, analyze.
+      - name: Headless smoke test
+        shell: pwsh
+        run: |
+          mkdir fixtures
+          eventcreate /L APPLICATION /T ERROR /ID 999 /SO EVTest /D "synthetic test error one" | Out-Null
+          eventcreate /L APPLICATION /T ERROR /ID 999 /SO EVTest /D "synthetic test error two" | Out-Null
+          eventcreate /L APPLICATION /T WARNING /ID 998 /SO EVTest /D "synthetic test warning" | Out-Null
+          wevtutil epl Application fixtures\app.evtx "/q:*[System[Provider[@Name='EVTest']]]"
+
+          $p = Start-Process -FilePath "publish/EventLogAnalyzer.exe" `
+            -ArgumentList "--report", "fixtures/app.evtx", "fixtures/report.txt" `
+            -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { Get-Content fixtures/report.txt; throw "headless run failed" }
+          $report = Get-Content fixtures/report.txt -Raw
+          Write-Host $report
+          foreach ($needle in @(
+            "Total events: 3",
+            "Unrecognised error event from EVTest",
+            "Occurrences: 2",
+            "synthetic test error one",
+            "Unrecognised warning event from EVTest")) {
+            if ($report -notmatch [regex]::Escape($needle)) { throw "report missing: $needle" }
+          }
+          "smoke test passed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EventLogAnalyzer-win-x64
+          path: publish/

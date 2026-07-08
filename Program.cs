@@ -19,25 +19,20 @@ static class Program
         return 0;
     }
 
+    // --report <file.evtx> [more.evtx ...] [output.txt]
     static int RunHeadless(string[] args)
     {
-        var evtxPath = args[0];
-        var outPath = args.Length > 1 ? args[1] : evtxPath + ".report.txt";
+        var inputs = args.Where(a => a.EndsWith(".evtx", StringComparison.OrdinalIgnoreCase)).ToList();
+        var outPath = args.FirstOrDefault(a => !a.EndsWith(".evtx", StringComparison.OrdinalIgnoreCase))
+                      ?? inputs[0] + ".report.txt";
         try
         {
             var rules = RuleSet.Load(Path.Combine(AppContext.BaseDirectory, "rules.json"));
-            var result = EventAnalyzer.Analyze(evtxPath, rules);
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"Event Log Analyzer report for: {evtxPath}");
-            sb.AppendLine($"Total events: {result.TotalEvents:N0}   Errors/warnings: {result.ProblemEvents:N0}   Distinct issues: {result.Findings.Count}");
-            sb.AppendLine(new string('=', 78));
-            foreach (var f in result.Findings)
-            {
-                sb.AppendLine(ReportFormatter.Format(f));
-                sb.AppendLine(new string('-', 78));
-            }
-            File.WriteAllText(outPath, sb.ToString());
+            var sources = inputs
+                .Select(f => new LogSource(f, System.Diagnostics.Eventing.Reader.PathType.FilePath))
+                .ToList();
+            var result = EventAnalyzer.Analyze(sources, rules);
+            File.WriteAllText(outPath, ReportFormatter.FormatFullReport(string.Join(", ", inputs), result));
             return 0;
         }
         catch (Exception ex)

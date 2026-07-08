@@ -9,12 +9,14 @@ Writes two files into the output directory (default: cwd):
                      keyword variant) and DCOM 10016 noise.
 
 Each file is one chunk; records share a BinXml template (inline definition on
-the first record, back-references after). Checksums are left zero - the JS
-parser does not verify them.
+the first record, back-references after). CRC32 checksums are filled in so the
+files also open in the real Windows Event Log API (the desktop app / Event
+Viewer), not just the JS parser.
 """
 import struct
 import sys
 import uuid
+import zlib
 
 CHUNK_DATA_START = 512
 FILETIME_EPOCH = 11644473600  # seconds between 1601 and 1970
@@ -30,9 +32,18 @@ def utf16(s):
     return s.encode('utf-16-le')
 
 
+def name_hash(s):
+    """EVTX name hash: h = h*65599 + UTF-16 code unit, truncated to 16 bits."""
+    h = 0
+    for ch in s:
+        h = (h * 65599 + ord(ch)) & 0xFFFF
+    return h
+
+
 class ChunkBuilder:
     def __init__(self):
         self.buf = bytearray()
+        self._elements = []  # stack of (data_size_pos, attr_list_size_pos)
 
     @property
     def pos(self):
@@ -44,12 +55,17 @@ class ChunkBuilder:
     def u32(self, v): self.buf += struct.pack('<I', v)
     def u64(self, v): self.buf += struct.pack('<Q', v)
 
+    def patch_u32(self, at, v):
+        struct.pack_into('<I', self.buf, at, v)
+
     # --- binxml pieces -----------------------------------------------------
+    # Element data sizes, attribute list sizes, and name hashes are all
+    # validated by the Windows Event Log API, so they must be computed.
 
     def name_inline(self, s):
         self.u32(self.pos + 4)          # offset == position right after this field
-        self.u32(0)                     # next-string offset
-        self.u16(0)                     # name hash (unchecked)
+        self.u32(0)                     # next-string offset (hash bucket chain)
+        self.u16(name_hash(s))
         self.u16(len(s))
         self.raw(utf16(s))
         self.u16(0)                     # NUL
@@ -65,16 +81,41 @@ class ChunkBuilder:
     def open_element(self, name, has_attrs=False):
         self.u8(0x41 if has_attrs else 0x01)
         self.u16(0xFFFF)                # dependency identifier
-        self.u32(0)                     # data size (length hint, unused by parser)
+        size_pos = self.pos
+        self.u32(0)                     # data size - patched at close
         self.name_inline(name)
+        attr_pos = None
+        if has_attrs:
+            attr_pos = self.pos
+            self.u32(0)                 # attribute list size - patched at close_start
+        self._elements.append((size_pos, attr_pos))
 
     def attribute(self, name, more=False):
         self.u8(0x46 if more else 0x06)
         self.name_inline(name)
 
-    def close_start(self): self.u8(0x02)
-    def close_empty(self): self.u8(0x03)
-    def close_element(self): self.u8(0x04)
+    def _patch_attr_list(self):
+        _, attr_pos = self._elements[-1]
+        if attr_pos is not None:
+            self.patch_u32(attr_pos, self.pos - (attr_pos + 4))
+
+    def _patch_element(self):
+        size_pos, _ = self._elements.pop()
+        self.patch_u32(size_pos, self.pos - (size_pos + 4))
+
+    def close_start(self):
+        self._patch_attr_list()
+        self.u8(0x02)
+
+    def close_empty(self):
+        self._patch_attr_list()
+        self.u8(0x03)
+        self._patch_element()
+
+    def close_element(self):
+        self.u8(0x04)
+        self._patch_element()
+
     def eof(self): self.u8(0x00)
     def fragment_header(self): self.raw(bytes([0x0F, 0x01, 0x01, 0x00]))
 
@@ -84,7 +125,6 @@ def build_template_body(b: ChunkBuilder, channel: str):
     3=TimeCreated (filetime), 4=param1 (str), 5=param2 (str, optional)."""
     b.fragment_header()
     b.open_element('Event', has_attrs=True)
-    b.u32(0)
     b.attribute('xmlns')
     b.value_string('http://schemas.microsoft.com/win/2004/08/events/event')
     b.close_start()
@@ -92,7 +132,6 @@ def build_template_body(b: ChunkBuilder, channel: str):
     b.open_element('System')
     b.close_start()
     b.open_element('Provider', has_attrs=True)
-    b.u32(0)
     b.attribute('Name')
     b.subst(0, 0x01)
     b.close_empty()
@@ -101,7 +140,6 @@ def build_template_body(b: ChunkBuilder, channel: str):
     b.open_element('Level')
     b.close_start(); b.subst(2, 0x04); b.close_element()
     b.open_element('TimeCreated', has_attrs=True)
-    b.u32(0)
     b.attribute('SystemTime')
     b.subst(3, 0x11)
     b.close_empty()
@@ -114,12 +152,10 @@ def build_template_body(b: ChunkBuilder, channel: str):
     b.open_element('EventData')
     b.close_start()
     b.open_element('Data', has_attrs=True)
-    b.u32(0)
     b.attribute('Name')
     b.value_string('param1')
     b.close_start(); b.subst(4, 0x01); b.close_element()
     b.open_element('Data', has_attrs=True)
-    b.u32(0)
     b.attribute('Name')
     b.value_string('param2')
     b.close_start(); b.subst(5, 0x01, optional=True); b.close_element()
@@ -199,11 +235,19 @@ def write_evtx(path, channel, records):
     struct.pack_into('<I', b.buf, 44, last_rec)
     struct.pack_into('<I', b.buf, 48, b.pos)
 
+    # checksums (validated by the Windows Event Log API):
+    #  - event records checksum: CRC32 of the record data (512..free space)
+    #  - chunk checksum: CRC32 of header bytes 0..120 + tables 128..512
+    struct.pack_into('<I', b.buf, 52, zlib.crc32(b.buf[CHUNK_DATA_START:b.pos]))
+    struct.pack_into('<I', b.buf, 124, zlib.crc32(bytes(b.buf[0:120]) + bytes(b.buf[128:512])))
+
     chunk = bytes(b.buf) + bytes(0x10000 - b.pos)
     hdr = bytearray(4096)
     hdr[0:8] = b'ElfFile\x00'
     struct.pack_into('<QQQ', hdr, 8, 0, 0, len(records) + 1)
     struct.pack_into('<IHHHH', hdr, 32, 128, 1, 3, 4096, 1)
+    # file header checksum: CRC32 of the first 120 bytes
+    struct.pack_into('<I', hdr, 124, zlib.crc32(bytes(hdr[0:120])))
 
     with open(path, 'wb') as f:
         f.write(hdr)
