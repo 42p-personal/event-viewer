@@ -23,12 +23,22 @@ public class Rule
     // service name). Used to build a per-value occurrence breakdown.
     public DetailProp[]? BreakdownProps { get; set; }
 
-    public bool Matches(string provider, int eventId)
+    // Optional keywords: the rule only matches when any event data property
+    // contains one of these (case-insensitive). Rules are matched in file
+    // order, so keyword rules must appear before generic ones.
+    public string[]? DataContains { get; set; }
+
+    public bool Matches(string provider, int eventId, IReadOnlyList<string?> properties)
     {
         if (eventId != EventId) return false;
-        if (string.Equals(provider, Provider, StringComparison.OrdinalIgnoreCase)) return true;
-        return AltProviders != null &&
-               AltProviders.Any(p => string.Equals(provider, p, StringComparison.OrdinalIgnoreCase));
+        bool providerOk = string.Equals(provider, Provider, StringComparison.OrdinalIgnoreCase) ||
+            (AltProviders != null &&
+             AltProviders.Any(p => string.Equals(provider, p, StringComparison.OrdinalIgnoreCase)));
+        if (!providerOk) return false;
+        if (DataContains is { Length: > 0 })
+            return DataContains.Any(kw => properties.Any(v =>
+                v != null && v.Contains(kw, StringComparison.OrdinalIgnoreCase)));
+        return true;
     }
 }
 
@@ -75,6 +85,7 @@ public class Finding
         "medium" => 2,
         "low" => 3,
         "info" => 4,
+        "noise" => 5,
         _ => 2,
     };
 }

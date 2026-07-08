@@ -18,13 +18,14 @@
   </header>
 
   <main class="wrap">
-    <section id="dropzone" tabindex="0" role="button" aria-label="Choose or drop an .evtx file">
-      <input type="file" id="fileInput" accept=".evtx" hidden>
+    <section id="dropzone" tabindex="0" role="button" aria-label="Choose or drop .evtx files">
+      <input type="file" id="fileInput" accept=".evtx" multiple hidden>
       <div class="dz-inner">
         <div class="dz-icon" aria-hidden="true">📄</div>
         <div class="dz-text">
-          <strong>Drop an <code>.evtx</code> file here</strong> or click to browse
-          <div class="dz-sub">Analysis runs entirely in your browser — the file is never uploaded anywhere.</div>
+          <strong>Drop <code>.evtx</code> files here</strong> or click to browse
+          <div class="dz-sub">Analyze System and Application logs together for the full picture.
+            Everything runs in your browser — files are never uploaded anywhere.</div>
         </div>
       </div>
     </section>
@@ -44,13 +45,28 @@
 
     <section id="results" hidden>
       <div id="summary" class="summary"></div>
+
+      <section id="crashes" hidden>
+        <h2>Unexpected shutdowns &amp; crashes</h2>
+        <p class="section-sub">What was happening in the minutes before each one.</p>
+        <div id="crashCards"></div>
+      </section>
+
+      <section id="timelineSection" hidden>
+        <h2>Errors &amp; warnings over time</h2>
+        <div id="timelineChart" class="timeline"></div>
+        <div id="timelineLegend" class="tl-legend" role="list"></div>
+        <div id="tlTooltip" class="tl-tooltip" hidden></div>
+      </section>
+
+      <h2>Distinct issues</h2>
       <div class="results-grid">
         <div class="table-scroll">
           <table id="findingsTable">
             <thead>
               <tr>
                 <th>Severity</th><th>Count</th><th>Provider</th><th>Event ID</th>
-                <th>Issue</th><th>First seen</th><th>Last seen</th>
+                <th>Issue</th><th>Log</th><th>First seen</th><th>Last seen</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -60,7 +76,7 @@
       </div>
       <div class="actions">
         <button id="downloadBtn" type="button">Download full report (.txt)</button>
-        <button id="resetBtn" type="button" class="secondary">Analyze another file</button>
+        <button id="resetBtn" type="button" class="secondary">Analyze other files</button>
       </div>
     </section>
   </main>
