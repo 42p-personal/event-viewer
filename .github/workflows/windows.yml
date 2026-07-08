@@ -1,0 +1,45 @@
+name: Windows build
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build desktop app
+        run: dotnet publish EventLogAnalyzer.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+
+      - name: Generate synthetic .evtx fixtures
+        run: |
+          mkdir fixtures
+          python tests/make_evtx.py fixtures
+
+      # Headless end-to-end: the real Windows Event Log API reads the synthetic
+      # file (checksums included), the analyzer runs, the report is checked.
+      - name: Headless smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "publish/EventLogAnalyzer.exe" `
+            -ArgumentList "--report", "fixtures/system.evtx", "fixtures/report.txt" `
+            -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { Get-Content fixtures/report.txt; throw "headless run failed" }
+          $report = Get-Content fixtures/report.txt -Raw
+          Write-Host $report
+          foreach ($needle in @("Disk has a bad block", "Service crashed unexpectedly", "Print Spooler")) {
+            if ($report -notmatch [regex]::Escape($needle)) { throw "report missing: $needle" }
+          }
+          "smoke test passed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EventLogAnalyzer-win-x64
+          path: publish/

@@ -9,12 +9,14 @@ Writes two files into the output directory (default: cwd):
                      keyword variant) and DCOM 10016 noise.
 
 Each file is one chunk; records share a BinXml template (inline definition on
-the first record, back-references after). Checksums are left zero - the JS
-parser does not verify them.
+the first record, back-references after). CRC32 checksums are filled in so the
+files also open in the real Windows Event Log API (the desktop app / Event
+Viewer), not just the JS parser.
 """
 import struct
 import sys
 import uuid
+import zlib
 
 CHUNK_DATA_START = 512
 FILETIME_EPOCH = 11644473600  # seconds between 1601 and 1970
@@ -199,11 +201,19 @@ def write_evtx(path, channel, records):
     struct.pack_into('<I', b.buf, 44, last_rec)
     struct.pack_into('<I', b.buf, 48, b.pos)
 
+    # checksums (validated by the Windows Event Log API):
+    #  - event records checksum: CRC32 of the record data (512..free space)
+    #  - chunk checksum: CRC32 of header bytes 0..120 + tables 128..512
+    struct.pack_into('<I', b.buf, 52, zlib.crc32(b.buf[CHUNK_DATA_START:b.pos]))
+    struct.pack_into('<I', b.buf, 124, zlib.crc32(bytes(b.buf[0:120]) + bytes(b.buf[128:512])))
+
     chunk = bytes(b.buf) + bytes(0x10000 - b.pos)
     hdr = bytearray(4096)
     hdr[0:8] = b'ElfFile\x00'
     struct.pack_into('<QQQ', hdr, 8, 0, 0, len(records) + 1)
     struct.pack_into('<IHHHH', hdr, 32, 128, 1, 3, 4096, 1)
+    # file header checksum: CRC32 of the first 120 bytes
+    struct.pack_into('<I', hdr, 124, zlib.crc32(bytes(hdr[0:120])))
 
     with open(path, 'wb') as f:
         f.write(hdr)
