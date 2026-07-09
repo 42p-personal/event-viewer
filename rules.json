@@ -10,7 +10,8 @@
       "Check drive health with CrystalDiskInfo or the manufacturer's tool (watch SMART attributes: Reallocated Sectors, Pending Sectors).",
       "Run 'chkdsk /r' on the affected volume to map out the bad sectors.",
       "If more bad blocks appear over the following days, replace the drive."
-    ]
+    ],
+    "impact": "Bad blocks multiply. Files silently corrupt, then one day the drive doesn't mount. Back up now, not after troubleshooting."
   },
   {
     "provider": "disk",
@@ -23,7 +24,8 @@
       "If it's an external drive: try a different USB cable and port; the enclosure electronics are a common culprit.",
       "Update the storage/chipset drivers from the motherboard vendor.",
       "Check the drive's SMART health (CrystalDiskInfo) - if degraded, back up and replace it."
-    ]
+    ],
+    "impact": "If the cause is a cable it stays an annoyance; if it's the drive, expect corruption and eventually a dead disk."
   },
   {
     "provider": "disk",
@@ -36,7 +38,8 @@
       "If it's a SATA drive, reseat/replace the cable.",
       "Update storage drivers and the SSD's firmware.",
       "If entries are frequent, back up the drive and plan a replacement."
-    ]
+    ],
+    "impact": "Occasional retries cost a stutter. Frequent ones mean the drive is struggling and may be on the way out."
   },
   {
     "provider": "storahci",
@@ -55,7 +58,8 @@
       "Disable PCIe/AHCI Link State Power Management in the active power plan (Power Options > Advanced settings).",
       "Update the storage driver (or switch between the vendor driver and Microsoft's inbox driver).",
       "Check SMART health; if the drive is degrading, replace it."
-    ]
+    ],
+    "impact": "Each reset freezes the whole system for up to 30 seconds. If the underlying cause is drive failure, data loss follows."
   },
   {
     "provider": "Ntfs",
@@ -71,7 +75,8 @@
       "Check the drive's SMART health - corruption plus a degrading drive means back up and replace now.",
       "If corruption recurs on a healthy drive, test RAM (Windows Memory Diagnostic or MemTest86).",
       "Avoid hard power-offs; check that write caching isn't enabled on a drive without power-loss protection."
-    ]
+    ],
+    "impact": "File system damage compounds - files and folders can disappear or become unopenable. Run the repair promptly."
   },
   {
     "provider": "volsnap",
@@ -83,7 +88,8 @@
       "Increase shadow storage: vssadmin resize shadowstorage /for=C: /on=C: /maxsize=10%",
       "If this happened during heavy disk activity (big installs, backups), it may be a one-off.",
       "If you rely on System Restore or file history versions, verify they still exist afterwards."
-    ]
+    ],
+    "impact": "Restore points and file history snapshots are being lost - you may find there's no backup when you need one."
   },
   {
     "provider": "Microsoft-Windows-Kernel-Power",
@@ -97,7 +103,8 @@
       "Disable any CPU/GPU overclock and XMP memory profile to test stability.",
       "If it happens when idle or sleeping: update BIOS and chipset drivers, and review sleep/hibernate settings.",
       "If BugCheckCode is 0 and it correlates with mains power issues, consider a UPS."
-    ]
+    ],
+    "impact": "The machine will keep dying without warning; every occurrence risks corrupting whatever was being written to disk."
   },
   {
     "provider": "EventLog",
@@ -108,7 +115,8 @@
     "solutions": [
       "Treat together with any Kernel-Power 41 entries at the same time - see that finding's advice.",
       "If there is no matching crash evidence, suspect power loss or a forced power-off."
-    ]
+    ],
+    "impact": "Unsaved work is lost each time, and repeated dirty shutdowns gradually corrupt the file system."
   },
   {
     "provider": "Microsoft-Windows-WER-SystemErrorReporting",
@@ -125,7 +133,8 @@
       "Update or roll back the identified driver (GPU and network drivers are the most common offenders).",
       "If crashes are random with varying stop codes, test RAM with MemTest86 and disable XMP to test.",
       "Run 'sfc /scannow' and 'dism /online /cleanup-image /restorehealth' to rule out system file corruption."
-    ]
+    ],
+    "impact": "Blue screens repeat until the driver/hardware cause is fixed, and each one risks data loss."
   },
   {
     "provider": "Microsoft-Windows-WHEA-Logger",
@@ -138,7 +147,8 @@
       "Update the driver of the device named in the event (often GPU or network card).",
       "If frequent: reseat the card, and try disabling PCIe link power management.",
       "Occasional corrected errors with no symptoms can be safely ignored."
-    ]
+    ],
+    "impact": "Corrected errors cost nothing today, but rising counts often precede an uncorrectable crash - watch the trend."
   },
   {
     "provider": "Microsoft-Windows-WHEA-Logger",
@@ -152,7 +162,8 @@
       "Check CPU temperatures under load and verify PSU cables are seated.",
       "Test RAM with MemTest86.",
       "If it persists at stock settings on an updated BIOS, the CPU or motherboard may need RMA."
-    ]
+    ],
+    "impact": "This is hardware failing mid-operation. Expect blue screens and possible data corruption until the component is replaced."
   },
   {
     "provider": "Microsoft-Windows-WHEA-Logger",
@@ -164,7 +175,8 @@
       "If overclocked or undervolted, back the settings off - this is the most common cause.",
       "Update the BIOS for the latest CPU microcode.",
       "If frequent at stock settings, monitor closely - corrected errors can precede fatal ones (WHEA 18)."
-    ]
+    ],
+    "impact": "Corrected memory errors are a countdown: when one finally isn't correctable, the machine blue-screens."
   },
   {
     "provider": "Service Control Manager",
@@ -187,7 +199,8 @@
       "If you still use the software, reinstall it to repair the service.",
       "Check the service's dependencies and logon account in services.msc.",
       "If it only fails at boot but starts fine manually, set it to 'Automatic (Delayed Start)'."
-    ]
+    ],
+    "impact": "Whatever {top} provides simply won't work after boot - features go missing until the service is fixed."
   },
   {
     "provider": "Service Control Manager",
@@ -205,7 +218,8 @@
       "Set the affected service to 'Automatic (Delayed Start)' in services.msc.",
       "If several services do this and the system drive is a hard disk, that's the bottleneck - an SSD fixes it.",
       "As a workaround, raise the timeout: registry value ServicesPipeTimeout (DWORD, ms) under HKLM\\SYSTEM\\CurrentControlSet\\Control, then reboot."
-    ]
+    ],
+    "impact": "The service eventually starts late or not at all, so its features are unreliable right after boot."
   },
   {
     "provider": "Service Control Manager",
@@ -227,7 +241,8 @@
       "Read the error in the message - it's often specific (access denied, missing file, bad configuration).",
       "Update or reinstall the application that owns the service.",
       "If it's a Windows built-in service, search the service name + error text; many have well-known fixes."
-    ]
+    ],
+    "impact": "The service is running degraded or dying quietly - its features fail in ways that look random."
   },
   {
     "provider": "Service Control Manager",
@@ -245,7 +260,8 @@
       "Check the Application log for an 'Application Error 1000' entry at the same time - it names the faulting module.",
       "Update or reinstall the software that owns the service.",
       "If it crashes repeatedly in a short window, the recovery restarts can mask a real problem - fix the root cause."
-    ]
+    ],
+    "impact": "Every crash interrupts what the service was doing; frequent restarts can mask a fault that eventually sticks."
   },
   {
     "provider": "Service Control Manager",
@@ -263,7 +279,8 @@
       "Check the Application log for a matching 'Application Error 1000' entry naming the faulting module.",
       "Update or reinstall the owning software; check the vendor's site for known crash fixes.",
       "Restart the service manually (services.msc) once addressed, and consider configuring recovery actions on its Recovery tab."
-    ]
+    ],
+    "impact": "Same as 7031 but with no automatic recovery configured - the service stays dead until reboot."
   },
   {
     "provider": "Application Error",
@@ -285,7 +302,8 @@
       "Uninstall or update software that injects into other processes: overlays, antivirus, mouse/keyboard tweak tools.",
       "If several unrelated applications crash in ntdll.dll, test the RAM (Windows Memory Diagnostic or MemTest86).",
       "Check for the same crash with a clean boot (msconfig > selective startup) to rule out third-party services."
-    ]
+    ],
+    "impact": "Heap corruption gets worse, not better - and if the true cause is failing RAM, everything on the machine is at risk."
   },
   {
     "provider": "Application Error",
@@ -304,11 +322,12 @@
     ],
     "cause": "A program crashed. The message names the faulting application and the faulting module - the module is the better clue (the app may be a victim of a bad DLL or driver).",
     "solutions": [
-      "Note the 'Faulting application' and 'Faulting module' in the message.",
-      "Update or reinstall the crashing application.",
-      "If the faulting module belongs to a driver (e.g. GPU DLLs like nvwgf2umx.dll, atidxx64.dll), update that driver instead.",
-      "If many different apps crash in ntdll.dll or kernelbase.dll, suspect the system: test RAM and run 'sfc /scannow'."
-    ]
+      "Update or reinstall {top} - crash fixes ship in newer versions.",
+      "If the faulting module (second breakdown value) is a Windows DLL, run 'sfc /scannow' from an elevated prompt.",
+      "If it's a third-party DLL (overlay, antivirus, tweak tool), update or remove that software.",
+      "Search the web for the exact pair: {top} crash - solutions are usually version-specific."
+    ],
+    "impact": "The app keeps crashing and can take unsaved work with it. If the faulting module is shared (a DLL), other apps may follow."
   },
   {
     "provider": "Application Hang",
@@ -323,10 +342,11 @@
     ],
     "cause": "A program froze and was terminated (or waited out). One-offs are usually harmless; a pattern points at the app, a slow/failing disk it was waiting on, or a driver.",
     "solutions": [
-      "Update the application named in the message.",
-      "If it hangs while opening/saving files, check the health of the disk or network share involved.",
-      "If many different apps hang, check disk health and look for disk events (disk 7/11/153, storahci 129) in the same log."
-    ]
+      "Update {top} first - hangs are usually known bugs.",
+      "Check whether the hang coincides with heavy disk activity (Task Manager > Performance) - a struggling drive freezes apps.",
+      "Disable the app's add-ins/extensions and retest; add-ins cause most Office and browser hangs."
+    ],
+    "impact": "Freezes keep costing you force-closes and lost work until the cause (often a slow disk or a bad add-in) is fixed."
   },
   {
     "provider": ".NET Runtime",
@@ -339,7 +359,8 @@
       "Check for a paired 'Application Error 1000' naming the same process.",
       "If it's your own app, the stack trace in the message is the starting point.",
       "Repair the .NET runtime only if many unrelated .NET apps fail the same way."
-    ]
+    ],
+    "impact": "The application will keep dying at the same point until it or the .NET runtime is updated."
   },
   {
     "provider": "Microsoft-Windows-DistributedCOM",
@@ -350,7 +371,8 @@
     "solutions": [
       "Ignore it - Microsoft explicitly documents these events as safe to ignore.",
       "Only investigate if a specific application visibly fails and its failure matches the CLSID/APPID in this event."
-    ]
+    ],
+    "impact": "None - Microsoft documents these as safe to ignore."
   },
   {
     "provider": "Microsoft-Windows-DistributedCOM",
@@ -361,7 +383,8 @@
     "solutions": [
       "Ignore unless an application is visibly misbehaving.",
       "If frequent, search the CLSID from the message in the registry (HKCR\\CLSID) to identify which app owns it, then update or reinstall that app."
-    ]
+    ],
+    "impact": "Rarely anything - at worst a background feature starts slowly."
   },
   {
     "provider": "Display",
@@ -381,11 +404,12 @@
     ],
     "cause": "The GPU driver hung and Windows reset it (screen goes black for a couple of seconds). Causes: buggy GPU driver, overheating, unstable GPU overclock or undervolt, or a failing card.",
     "solutions": [
-      "Clean-install the latest GPU driver: remove the old one with DDU (Display Driver Uninstaller) in safe mode first.",
-      "Check GPU temperatures under load; clean dust and verify fans spin.",
-      "Remove any GPU overclock/undervolt (including factory OC - try underclocking slightly to test).",
-      "If it persists across driver versions, try an older known-good driver branch; if it still persists, suspect the card or its power cables."
-    ]
+      "Update the driver named in the breakdown ({top}) directly from NVIDIA/AMD/Intel - not Windows Update.",
+      "If it began after a driver update, roll back (Device Manager > Display adapters > Properties > Driver > Roll Back).",
+      "Check GPU temperature under load (HWiNFO); dust and dead fans cause TDR resets.",
+      "If it persists across driver versions, test with underclocked GPU or another card - the hardware may be failing."
+    ],
+    "impact": "Each reset is a 2-5 second black screen; games/video apps may crash. Frequent TDRs sometimes precede full GPU failure."
   },
   {
     "provider": "Microsoft-Windows-Kernel-PnP",
@@ -397,7 +421,8 @@
       "Check whether the device named in the message actually works - if yes, ignore this.",
       "If the device doesn't work, update its driver from the vendor's site.",
       "Common harmless source: 'dam' (Desktop Activity Moderator) and similar system drivers on some hardware."
-    ]
+    ],
+    "impact": "The affected device may be missing or flaky until its driver loads properly - usually cosmetic if everything works."
   },
   {
     "provider": "Schannel",
@@ -409,7 +434,8 @@
       "Ignore if nothing is visibly broken - these are very common and mostly harmless.",
       "If an app's connections are actually failing, update that app.",
       "If frequent, enabling Schannel event logging detail can identify the process (search: Schannel EventLogging registry)."
-    ]
+    ],
+    "impact": "Usually none for browsing; can break specific apps that need TLS client credentials."
   },
   {
     "provider": "Microsoft-Windows-DNS-Client",
@@ -421,7 +447,8 @@
       "Ignore occasional entries.",
       "If frequent: reboot the router, and try switching DNS servers to 1.1.1.1 (Cloudflare) or 8.8.8.8 (Google) in adapter settings.",
       "On Wi-Fi, check for signal drops; update the network adapter driver."
-    ]
+    ],
+    "impact": "Pages occasionally fail to load or load slowly; if constant, name resolution (and thus everything) is unreliable."
   },
   {
     "provider": "NETLOGON",
@@ -437,7 +464,8 @@
       "Verify the machine's DNS points at the domain's DNS servers (not a public resolver).",
       "Check basic connectivity to the DC: ping it, and test with 'nltest /dsgetdc:yourdomain'.",
       "On laptops/VPN clients, this is expected whenever off the corporate network."
-    ]
+    ],
+    "impact": "On a domain machine, logons and group policy fail or run slow. On a home PC it's leftover noise from a removed domain."
   },
   {
     "provider": "Microsoft-Windows-GroupPolicy",
@@ -450,7 +478,8 @@
       "Verify DNS points at the domain controllers.",
       "Test SYSVOL access directly: open \\\\yourdomain\\SYSVOL in Explorer.",
       "If multiple machines are affected, investigate SYSVOL replication on the DCs (this is a server-side issue)."
-    ]
+    ],
+    "impact": "Policies stop applying - settings drift and security configuration may be stale."
   },
   {
     "provider": "Microsoft-Windows-WindowsUpdateClient",
@@ -463,7 +492,8 @@
       "Run the Windows Update troubleshooter (Settings > Troubleshoot).",
       "Reset update components: stop the wuauserv and bits services, rename C:\\Windows\\SoftwareDistribution, restart the services, retry.",
       "If one specific KB keeps failing, download it manually from the Microsoft Update Catalog."
-    ]
+    ],
+    "impact": "The machine misses security patches until the failing update is unblocked."
   },
   {
     "provider": "Microsoft-Windows-User Profiles Service",
@@ -476,7 +506,8 @@
       "Fix the registry: under HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList, find the SID ending in '.bak', and repair the duplicate (rename/remove the broken entry).",
       "If that fails, create a fresh user account and copy the data across from C:\\Users\\<olduser>.",
       "Check disk health - profile corruption is sometimes the first symptom of a failing drive."
-    ]
+    ],
+    "impact": "You get a temporary profile: your desktop, files and settings appear 'gone' every logon until the profile is repaired."
   },
   {
     "provider": "Microsoft-Windows-Kernel-Processor-Power",
@@ -489,7 +520,8 @@
       "If performance is noticeably poor: check cooling (dust, fans) and CPU temperatures.",
       "Set the power plan to Balanced/High performance and check BIOS settings for power limits.",
       "Update the BIOS - some vendors have shipped fixes for over-aggressive throttling."
-    ]
+    ],
+    "impact": "Performance is being throttled - the CPU runs slower than it should, usually due to thermals or firmware."
   },
   {
     "provider": "Microsoft-Windows-Time-Service",
@@ -500,7 +532,8 @@
     "solutions": [
       "Ignore occasional entries - the next sync succeeds.",
       "If the clock actually drifts, run 'w32tm /resync' and check internet/firewall access to time.windows.com."
-    ]
+    ],
+    "impact": "Nothing, unless the clock visibly drifts - then TLS errors and login problems can appear."
   },
   {
     "provider": "Microsoft-Windows-Windows Defender",
@@ -516,7 +549,8 @@
       "Run a Full scan (not Quick) to check for anything related.",
       "If detections repeat for the same item, note the file path - something keeps re-dropping it; investigate that program.",
       "For a suspected false positive, check the detection name on Microsoft's security intelligence site before restoring anything."
-    ]
+    ],
+    "impact": "If the threat wasn't removed, active malware stays on the machine. Never ignore unhandled detections."
   },
   {
     "provider": "Perflib",
@@ -536,7 +570,8 @@
     "solutions": [
       "Ignore it unless you actively use Performance Monitor counters for the named service.",
       "If you need those counters, rebuild them from an elevated prompt: 'lodctr /R' then 'winmgmt /resyncperf'."
-    ]
+    ],
+    "impact": "None - only Performance Monitor statistics for that service are affected."
   },
   {
     "provider": "Microsoft-Windows-User Profiles Service",
@@ -547,7 +582,8 @@
     "solutions": [
       "Ignore it - this is informational housekeeping.",
       "If sign-out is actually slow, the event data names the process holding the handle; update that software."
-    ]
+    ],
+    "impact": "None - Windows cleans this up itself; at worst sign-out takes a moment longer."
   },
   {
     "provider": "Schannel",
@@ -565,7 +601,8 @@
       "Ignore occasional entries - transient server-side issues cause them.",
       "If frequent, note which times they occur and what software runs then (browsers, mail clients, update agents).",
       "Update the software making the connections; old apps offering TLS 1.0/1.1 trigger alert 70 against modern servers."
-    ]
+    ],
+    "impact": "Usually none; if frequent, one of your apps is failing its secure connections and may be silently not working."
   },
   {
     "provider": "Application Popup",
@@ -583,6 +620,7 @@
       "Read the caption/message in the sample data below - it usually names the failing program directly.",
       "Update or reinstall that program.",
       "If it appears at every boot, check Task Manager > Startup for the offending entry."
-    ]
+    ],
+    "impact": "The popups keep interrupting; the underlying program error stays unfixed."
   }
 ]

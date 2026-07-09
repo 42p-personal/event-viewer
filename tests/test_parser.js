@@ -37,8 +37,8 @@ async function parseInto(analyzer, fileName) {
 
   // --- parsing basics ---
   check(s1.parseErrors === 0 && s2.parseErrors === 0, 'no parse errors');
-  check(result.totalEvents === 24, `total events = 24 (got ${result.totalEvents})`);
-  check(result.problemEvents === 20, `problem events = 20, info excluded (got ${result.problemEvents})`);
+  check(result.totalEvents === 25, `total events = 25 (got ${result.totalEvents})`);
+  check(result.problemEvents === 21, `problem events = 21, info excluded (got ${result.problemEvents})`);
 
   // --- classic grouping / rules ---
   const disk = result.findings.find((f) => f.provider === 'disk' && f.eventId === 7);
@@ -53,6 +53,26 @@ async function parseInto(analyzer, fileName) {
 
   const unknown = result.findings.find((f) => f.provider === 'FooBarDriver');
   check(!!unknown && !unknown.recognised && unknown.count === 2, 'unknown provider still reported');
+
+  // --- personalized advice ---
+  check(scm && scm.solutions[0].includes('Start with Print Spooler') && scm.solutions[0].includes('3 of the 4'),
+    `SCM advice names the top culprit: ${scm && scm.solutions[0]}`);
+  check(disk && disk.impact && disk.impact.includes('Back up'),
+    'disk/7 has an impact-if-ignored line');
+  check(Analyzer.formatFinding(disk).includes('If ignored:'),
+    'impact renders in the report');
+  const appGeneric = result.findings.find((f) => f.provider === 'Application Error' && !f.title.includes('ntdll'));
+  check(!!appGeneric && appGeneric.solutions.some((s) => s.includes('badapp.exe')),
+    'app-crash advice names the faulting app via {top}');
+
+  // --- unknown-event heuristics ---
+  const baz = result.findings.find((f) => f.provider === 'BazVolumeMgr');
+  check(!!baz && baz.title.includes('(looks storage-related)'),
+    `provider-name heuristic categorises BazVolumeMgr: ${baz && baz.title}`);
+  check(!!baz && baz.solutions.some((s) => s.includes('CrystalDiskInfo')),
+    'heuristic adds storage-specific steps');
+  check(!!unknown && !unknown.title.includes('(looks'),
+    'no false category for FooBarDriver');
 
   // --- multi-file / channels ---
   check(result.channels.join(',') === 'Application,System',

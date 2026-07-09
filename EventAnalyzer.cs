@@ -205,8 +205,10 @@ public static class EventAnalyzer
         {
             foreach (var ((provider, id, _), agg) in _groups)
             {
-                var finding = agg.Rule != null
-                    ? new Finding
+                Finding finding;
+                if (agg.Rule != null)
+                {
+                    finding = new Finding
                     {
                         Recognised = true,
                         Severity = agg.Rule.Severity,
@@ -217,6 +219,7 @@ public static class EventAnalyzer
                         LastSeen = agg.Last?.ToLocalTime(),
                         Title = agg.Rule.Title,
                         Cause = agg.Rule.Cause,
+                        Impact = agg.Rule.Impact,
                         Solutions = agg.Rule.Solutions,
                         Breakdown = agg.SortedBreakdown(),
                         BreakdownLabel = agg.Rule.BreakdownProps != null
@@ -224,8 +227,13 @@ public static class EventAnalyzer
                             : "",
                         BreakdownOverflow = agg.BreakdownOverflow,
                         Samples = agg.Samples,
-                    }
-                    : MakeUnknownFinding(provider, id, agg);
+                    };
+                    Personalize(finding);
+                }
+                else
+                {
+                    finding = MakeUnknownFinding(provider, id, agg);
+                }
                 finding.Channels = agg.Channels.OrderBy(c => c).ToList();
                 Result.Findings.Add(finding);
             }
@@ -297,6 +305,117 @@ public static class EventAnalyzer
         }
     }
 
+    // Fill {top}/{topCount}/{count}/{provider}/{eventId}/{breakdownLabel}
+    // placeholders in rule text with the finding's own data, so advice names
+    // the actual culprit. Solution lines with unavailable data are dropped;
+    // cause/impact fall back to a generic phrase instead.
+    static void Personalize(Finding f)
+    {
+        string? top = f.Breakdown.Count > 0 ? f.Breakdown[0].Value : null;
+        string genericTop = "the affected " + (f.BreakdownLabel.Length > 0 ? f.BreakdownLabel.ToLowerInvariant() : "item");
+
+        string? Fill(string text, bool lenient)
+        {
+            bool unresolved = false;
+            string Sub(string placeholder, string? value)
+            {
+                if (!text.Contains(placeholder)) return text;
+                if (value == null) { unresolved = true; return text; }
+                return text.Replace(placeholder, value);
+            }
+            text = Sub("{top}", top ?? (lenient ? genericTop : null));
+            text = Sub("{topCount}", f.Breakdown.Count > 0 ? f.Breakdown[0].Count.ToString("N0") : null);
+            text = Sub("{count}", f.Count.ToString("N0"));
+            text = Sub("{provider}", f.Provider);
+            text = Sub("{eventId}", f.EventId.ToString());
+            text = Sub("{breakdownLabel}", f.BreakdownLabel.Length > 0 ? f.BreakdownLabel : null);
+            return unresolved ? null : text;
+        }
+
+        f.Cause = Fill(f.Cause, true) ?? f.Cause;
+        if (f.Impact.Length > 0) f.Impact = Fill(f.Impact, true) ?? f.Impact;
+        var solutions = f.Solutions.Select(s => Fill(s, false)).Where(s => s != null).Cast<string>().ToList();
+        if (top != null && top != "?" && f.Count > f.Breakdown[0].Count)
+        {
+            solutions.Insert(0,
+                $"Start with {top} - it accounts for {f.Breakdown[0].Count:N0} of the {f.Count:N0} occurrences ({f.BreakdownLabel}).");
+        }
+        f.Solutions = solutions.ToArray();
+    }
+
+    // Provider-name heuristics: even without a specific rule, the provider
+    // usually reveals which subsystem an event belongs to.
+    static readonly (string Pattern, string Label, string Cause, string[] Steps)[] ProviderHints =
+    {
+        ("disk|stor|nvme|ahci|raid|volsnap|ntfs|volume|partmgr|volmgr|iastor", "storage",
+         "The provider name suggests this is a storage (disk/SSD/controller) event.",
+         new[]
+         {
+             "Check the drive health with CrystalDiskInfo (SMART attributes: Reallocated Sectors, Pending Sectors).",
+             "Back up important data before troubleshooting further - storage errors can escalate.",
+             "Run 'chkdsk /r' on the affected volume from an elevated prompt.",
+         }),
+        ("display|nvlddmkm|amdkmdag|igfx|dxgkrnl|graphics|nvhda", "graphics",
+         "The provider name suggests this involves the graphics card or display driver.",
+         new[]
+         {
+             "Update the GPU driver from NVIDIA/AMD/Intel directly (not Windows Update).",
+             "If it started after a driver update, roll back via Device Manager > Display adapters.",
+             "Check GPU temperatures under load (HWiNFO) - overheating causes driver resets.",
+         }),
+        ("tcpip|dhcp|dns|netbt|wlan|netwtw|e1dexpress|rtl8|winhttp|network|lldp|smbclient|smbserver", "network",
+         "The provider name suggests this is a networking event.",
+         new[]
+         {
+             "Update the network adapter driver from the PC or motherboard vendor.",
+             "Try 'ipconfig /flushdns' and 'netsh winsock reset' from an elevated prompt, then reboot.",
+             "If it correlates with drops/disconnects, test with a cable instead of Wi-Fi (or vice versa) to isolate.",
+         }),
+        ("usb|hidclass|bthusb|bluetooth|kernel-pnp|pnp", "USB/device",
+         "The provider name suggests a USB or plug-and-play device issue.",
+         new[]
+         {
+             "Note which device the event data names, then update or reinstall its driver.",
+             "Try a different USB port (rear motherboard ports are more reliable than front-panel or hubs).",
+             "If it repeats for the same device, test the device on another PC to rule out the device itself.",
+         }),
+        ("print|spool", "printing",
+         "The provider name suggests this is a printing subsystem event.",
+         new[]
+         {
+             "Clear the print queue: stop the Print Spooler service, delete C:\\Windows\\System32\\spool\\PRINTERS\\*, start it again.",
+             "Reinstall the printer with the newest driver from the manufacturer.",
+         }),
+        ("defender|antimalware|security", "security",
+         "The provider name suggests this comes from security or antivirus software.",
+         new[]
+         {
+             "Open Windows Security > Protection history and review what happened.",
+             "Run a Full scan if anything looks suspicious.",
+         }),
+        ("update|wuau|servicing|installer|msi", "updates/installer",
+         "The provider name suggests this relates to Windows Update or a software installer.",
+         new[]
+         {
+             "Run Settings > Windows Update > Retry, then the built-in Windows Update troubleshooter.",
+             "If updates fail repeatedly: 'dism /online /cleanup-image /restorehealth' then 'sfc /scannow' from an elevated prompt.",
+         }),
+        ("power|acpi|battery|thermal", "power/thermal",
+         "The provider name suggests a power management or thermal event.",
+         new[]
+         {
+             "Check Power Options - aggressive power saving causes many device dropouts.",
+             "On desktops: verify the PSU is adequate; on laptops: check the battery report (powercfg /batteryreport).",
+         }),
+        (@"\.net|clr|runtime", "application runtime",
+         "The provider name suggests an application runtime error (a program, not Windows itself).",
+         new[]
+         {
+             "The sample data usually names the application - update or reinstall it.",
+             "Install the latest .NET runtime from Microsoft if several apps are affected.",
+         }),
+    };
+
     static Finding MakeUnknownFinding(string provider, int id, Agg agg)
     {
         var (severity, levelName) = agg.Level switch
@@ -305,6 +424,23 @@ public static class EventAnalyzer
             2 => ("medium", "error"),
             _ => ("low", "warning"),
         };
+
+        var hint = ProviderHints.FirstOrDefault(h =>
+            System.Text.RegularExpressions.Regex.IsMatch(provider, h.Pattern,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+
+        var cause = hint.Pattern != null
+            ? $"This {levelName} event isn't in the rules database, but it can still be narrowed down: {hint.Cause}"
+            : $"This {levelName} event isn't in the rules database, so there's no specific explanation - but the details below still narrow it down.";
+
+        var steps = new List<string>
+        {
+            "Read the sample messages below - they often state the problem directly (file paths, device names, error codes).",
+        };
+        if (hint.Pattern != null) steps.AddRange(hint.Steps);
+        steps.Add($"Search the web for: {provider} event {id}");
+        steps.Add("If it lines up with a symptom you're seeing, note when it occurs (see First/Last seen and the timeline) and what changed on the machine around that time.");
+
         return new Finding
         {
             Recognised = false,
@@ -314,15 +450,10 @@ public static class EventAnalyzer
             Count = agg.Count,
             FirstSeen = agg.First?.ToLocalTime(),
             LastSeen = agg.Last?.ToLocalTime(),
-            Title = $"Unrecognised {levelName} event from {provider}",
-            Cause = "This event is not in the built-in rules database, so no specific advice is available.",
-            Solutions = new[]
-            {
-                $"Read the sample messages below - they often state the problem directly.",
-                $"Search the web for: {provider} event {id}",
-                "If it occurs frequently or lines up with a symptom you're seeing, investigate the software or device that owns this provider.",
-                "Consider adding a rule for it to rules.json once you know what it means.",
-            },
+            Title = $"Unrecognised {levelName} event from {provider}" +
+                (hint.Pattern != null ? $" (looks {hint.Label}-related)" : ""),
+            Cause = cause,
+            Solutions = steps.ToArray(),
             Samples = agg.Samples,
         };
     }

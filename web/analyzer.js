@@ -60,6 +60,112 @@
     return true;
   }
 
+  // ---------------------------------------------------------------- helpers
+  // Fill {top}/{topCount}/{count}/{provider}/{eventId} placeholders in rule
+  // text with the finding's own data, so advice names the actual culprit.
+
+  function fillPlaceholders(text, f, lenient) {
+    const top = f.breakdown && f.breakdown.length ? f.breakdown[0][0] : null;
+    const genericTop = 'the affected ' + (f.breakdownLabel ? f.breakdownLabel.toLowerCase() : 'item');
+    const map = {
+      '{top}': top !== null ? top : (lenient ? genericTop : null),
+      '{topCount}': top !== null ? String(f.breakdown[0][1]) : null,
+      '{count}': String(f.count),
+      '{provider}': f.provider,
+      '{eventId}': String(f.eventId),
+      '{breakdownLabel}': f.breakdownLabel || null,
+    };
+    let unresolved = false;
+    const out = text.replace(/\{top\}|\{topCount\}|\{count\}|\{provider\}|\{eventId\}|\{breakdownLabel\}/g, (m) => {
+      if (map[m] === null || map[m] === undefined) { unresolved = true; return m; }
+      return map[m];
+    });
+    return unresolved ? null : out; // strict mode: drop lines whose data we don't have
+  }
+
+  function personalize(f) {
+    // cause/impact always render (generic fallback); solution lines with
+    // unavailable data are dropped instead of showing raw placeholders.
+    f.cause = fillPlaceholders(f.cause, f, true) || f.cause;
+    if (f.impact) f.impact = fillPlaceholders(f.impact, f, true) || f.impact;
+    f.solutions = f.solutions.map((s) => fillPlaceholders(s, f, false)).filter((s) => s !== null);
+    // When we know the top culprit, make "start here" the literal first step.
+    const top = f.breakdown && f.breakdown.length ? f.breakdown[0] : null;
+    if (top && top[0] !== '?' && f.count > top[1]) {
+      f.solutions.unshift(
+        `Start with ${top[0]} - it accounts for ${nf.format(top[1])} of the ${nf.format(f.count)} occurrences (${f.breakdownLabel}).`);
+    }
+  }
+
+  // Provider-name heuristics: even without a specific rule, the provider
+  // usually reveals which subsystem an event belongs to.
+  const PROVIDER_HINTS = [
+    { match: /disk|stor|nvme|ahci|raid|volsnap|ntfs|volume|partmgr|volmgr|iastor/i, label: 'storage',
+      cause: 'The provider name suggests this is a storage (disk/SSD/controller) event.',
+      steps: [
+        'Check the drive health with CrystalDiskInfo (SMART attributes: Reallocated Sectors, Pending Sectors).',
+        'Back up important data before troubleshooting further - storage errors can escalate.',
+        "Run 'chkdsk /r' on the affected volume from an elevated prompt." ] },
+    { match: /display|nvlddmkm|amdkmdag|igfx|dxgkrnl|graphics|nvhda/i, label: 'graphics',
+      cause: 'The provider name suggests this involves the graphics card or display driver.',
+      steps: [
+        'Update the GPU driver from NVIDIA/AMD/Intel directly (not Windows Update).',
+        'If it started after a driver update, roll back via Device Manager > Display adapters.',
+        'Check GPU temperatures under load (HWiNFO) - overheating causes driver resets.' ] },
+    { match: /tcpip|dhcp|dns|netbt|wlan|netwtw|e1dexpress|rtl8|winhttp|network|lldp|smbclient|smbserver/i, label: 'network',
+      cause: 'The provider name suggests this is a networking event.',
+      steps: [
+        'Update the network adapter driver from the PC or motherboard vendor.',
+        "Try 'ipconfig /flushdns' and 'netsh winsock reset' from an elevated prompt, then reboot.",
+        'If it correlates with drops/disconnects, test with a cable instead of Wi-Fi (or vice versa) to isolate.' ] },
+    { match: /usb|hidclass|bthusb|bluetooth|kernel-pnp|pnp/i, label: 'USB/device',
+      cause: 'The provider name suggests a USB or plug-and-play device issue.',
+      steps: [
+        'Note which device the event data names, then update or reinstall its driver.',
+        'Try a different USB port (rear motherboard ports are more reliable than front-panel or hubs).',
+        'If it repeats for the same device, test the device on another PC to rule out the device itself.' ] },
+    { match: /print|spool/i, label: 'printing',
+      cause: 'The provider name suggests this is a printing subsystem event.',
+      steps: [
+        'Clear the print queue: stop the Print Spooler service, delete C:\\Windows\\System32\\spool\\PRINTERS\\*, start it again.',
+        'Reinstall the printer with the newest driver from the manufacturer.' ] },
+    { match: /defender|antimalware|security/i, label: 'security',
+      cause: 'The provider name suggests this comes from security or antivirus software.',
+      steps: [
+        'Open Windows Security > Protection history and review what happened.',
+        'Run a Full scan if anything looks suspicious.' ] },
+    { match: /update|wuau|servicing|installer|msi/i, label: 'updates/installer',
+      cause: 'The provider name suggests this relates to Windows Update or a software installer.',
+      steps: [
+        'Run Settings > Windows Update > Retry, then the built-in Windows Update troubleshooter.',
+        "If updates fail repeatedly: 'dism /online /cleanup-image /restorehealth' then 'sfc /scannow' from an elevated prompt." ] },
+    { match: /power|acpi|battery|thermal/i, label: 'power/thermal',
+      cause: 'The provider name suggests a power management or thermal event.',
+      steps: [
+        'Check Power Options - aggressive power saving causes many device dropouts.',
+        'On desktops: verify the PSU is adequate; on laptops: check the battery report (powercfg /batteryreport).' ] },
+    { match: /\.net|clr|runtime/i, label: 'application runtime',
+      cause: 'The provider name suggests an application runtime error (a program, not Windows itself).',
+      steps: [
+        'The sample data usually names the application - update or reinstall it.',
+        'Install the latest .NET runtime from Microsoft if several apps are affected.' ] },
+  ];
+
+  function unknownAdvice(provider, eventId, level) {
+    const levelName = level === 1 ? 'critical' : level === 2 ? 'error' : 'warning';
+    const hint = PROVIDER_HINTS.find((h) => h.match.test(provider));
+    const cause = hint
+      ? `This ${levelName} event isn't in the rules database, but it can still be narrowed down: ${hint.cause}`
+      : `This ${levelName} event isn't in the rules database, so there's no specific explanation - but the details below still narrow it down.`;
+    const steps = [
+      'Read the sample event data below - it often states the problem directly (file paths, device names, error codes).',
+      ...(hint ? hint.steps : []),
+      `Search the web for: ${provider} event ${eventId}`,
+      'If it lines up with a symptom you\'re seeing, note when it occurs (see First/Last seen and the timeline) and what changed on the machine around that time.',
+    ];
+    return { cause, steps, category: hint ? hint.label : null };
+  }
+
   function sampleFromRecord(rec) {
     if (!rec.properties.length) return '';
     const parts = rec.properties.map((v, i) => {
@@ -233,30 +339,31 @@
           samples: agg.samples,
         };
         if (agg.rule) {
-          findings.push(Object.assign(base, {
+          const f = Object.assign(base, {
             recognised: true,
             severity: agg.rule.severity || 'medium',
             title: agg.rule.title,
             cause: agg.rule.cause,
+            impact: agg.rule.impact || '',
             solutions: agg.rule.solutions || [],
             breakdown: [...agg.breakdown.entries()].sort((a, b) => b[1] - a[1]),
             breakdownLabel: (agg.rule.breakdownProps || []).map((p) => p.name).join(' / '),
             breakdownOverflow: agg.breakdownOverflow,
-          }));
+          });
+          personalize(f);
+          findings.push(f);
         } else {
           const levelName = agg.level === 1 ? 'critical' : agg.level === 2 ? 'error' : 'warning';
           const severity = agg.level === 1 ? 'high' : agg.level === 2 ? 'medium' : 'low';
+          const advice = unknownAdvice(agg.provider, agg.eventId, agg.level);
           findings.push(Object.assign(base, {
             recognised: false,
             severity,
-            title: `Unrecognised ${levelName} event from ${agg.provider}`,
-            cause: 'This event is not in the built-in rules database, so no specific advice is available.',
-            solutions: [
-              'Read the sample event data below - it often states the problem directly.',
-              `Search the web for: ${agg.provider} event ${agg.eventId}`,
-              "If it occurs frequently or lines up with a symptom you're seeing, investigate the software or device that owns this provider.",
-              'Consider adding a rule for it to rules.json once you know what it means.',
-            ],
+            title: `Unrecognised ${levelName} event from ${agg.provider}` +
+              (advice.category ? ` (looks ${advice.category}-related)` : ''),
+            cause: advice.cause,
+            impact: '',
+            solutions: advice.steps,
             breakdown: [],
             breakdownLabel: '',
             breakdownOverflow: 0,
@@ -309,6 +416,7 @@
     lines.push('');
     lines.push('What it means:');
     lines.push('  ' + f.cause);
+    if (f.impact) lines.push('  If ignored: ' + f.impact);
 
     if (f.breakdown.length > 0) {
       lines.push('');

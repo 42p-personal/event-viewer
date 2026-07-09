@@ -270,6 +270,8 @@ def system_records():
         ('Service Control Manager', 7031, 2, T0 + 600, 'Windows Update', '1'),
         ('FooBarDriver', 999, 3, T0 + 700, 'widget stalled', None),
         ('FooBarDriver', 999, 3, T0 + 800, 'widget stalled again', None),
+        # unknown provider whose name hints at storage (exercises heuristics)
+        ('BazVolumeMgr', 777, 3, T0 + 950, 'volume thing happened', None),
         ('EventLog', 6013, 4, T0 + 850, 'uptime 12345', None),
         # storage trouble right before the crash
         ('storahci', 129, 2, T - 90, 'ResetBus \\Device\\RaidPort0', None),

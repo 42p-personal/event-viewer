@@ -17,6 +17,7 @@ public class Rule
     public string Severity { get; set; } = "medium";
     public string Title { get; set; } = "";
     public string Cause { get; set; } = "";
+    public string Impact { get; set; } = "";
     public string[] Solutions { get; set; } = Array.Empty<string>();
 
     // Which event data properties identify the culprit (e.g. faulting app,
@@ -67,6 +68,7 @@ public class Finding
     public DateTime? LastSeen { get; set; }
     public string Title { get; set; } = "";
     public string Cause { get; set; } = "";
+    public string Impact { get; set; } = "";
     public string[] Solutions { get; set; } = Array.Empty<string>();
     public bool Recognised { get; set; }
 
@@ -151,6 +153,7 @@ public static class ReportFormatter
         sb.AppendLine();
         sb.AppendLine("What it means:");
         sb.AppendLine("  " + f.Cause);
+        if (f.Impact.Length > 0) sb.AppendLine("  If ignored: " + f.Impact);
 
         if (f.Breakdown.Count > 0)
         {
