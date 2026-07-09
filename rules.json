@@ -308,6 +308,127 @@
   {
     "provider": "Application Error",
     "eventId": 1000,
+    "dataContains": [
+      "StackHash"
+    ],
+    "severity": "high",
+    "title": "Application crash with corrupted stack (StackHash)",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Faulting application"
+      }
+    ],
+    "cause": "The faulting module shows as 'StackHash_...', which means the call stack itself was corrupted or Data Execution Prevention stopped the program - Windows couldn't even tell which module failed. Usual causes: a badly misbehaving app, DEP-incompatible legacy software, or an exploit-style memory error.",
+    "impact": "The app will keep dying, and stack corruption bugs can be triggered by malicious input - update promptly.",
+    "solutions": [
+      "Update {top} to the latest version.",
+      "If it's legacy software you must keep: System Properties > Advanced > Performance Settings > Data Execution Prevention, and add an exception (only if you trust it).",
+      "Run a malware scan - stack corruption is occasionally a sign of an exploited program."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
+    "dataContains": [
+      "nvwgf2umx.dll",
+      "nvoglv64.dll",
+      "atidxx64.dll",
+      "atig6txx.dll",
+      "igd10iumd64.dll",
+      "igd11dxva64.dll"
+    ],
+    "severity": "high",
+    "title": "Application crash inside the graphics driver",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Faulting application"
+      }
+    ],
+    "cause": "The faulting module belongs to the GPU driver (NVIDIA/AMD/Intel). The application is a victim - the crash happened in graphics driver code, typically during rendering.",
+    "impact": "Games and GPU-accelerated apps (including browsers) keep crashing until the driver is fixed.",
+    "solutions": [
+      "Update the GPU driver directly from NVIDIA/AMD/Intel - not Windows Update.",
+      "If it started after a driver update, roll back (Device Manager > Display adapters > Driver > Roll Back Driver).",
+      "Do a clean driver install (NVIDIA: 'perform clean installation'; or use DDU in safe mode).",
+      "If {top} is the only app affected, also update it - it may use the driver in an unusual way."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
+    "dataContains": [
+      "ucrtbase.dll"
+    ],
+    "severity": "high",
+    "title": "Application crash in the C runtime (ucrtbase.dll)",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Faulting application"
+      }
+    ],
+    "cause": "The crash surfaced in the Universal C Runtime, which usually means the application called abort() after an internal error, or its Visual C++ runtime dependencies are broken.",
+    "impact": "The application keeps aborting at the same point until it or its runtime is repaired.",
+    "solutions": [
+      "Update or reinstall {top}.",
+      "Repair the Visual C++ Redistributables: reinstall the latest x64 and x86 packages from Microsoft.",
+      "Run 'sfc /scannow' from an elevated prompt to repair the system copy of the runtime."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
+    "dataContains": [
+      "mso.dll",
+      "wwlib.dll",
+      "excel.exe",
+      "winword.exe",
+      "outlook.exe"
+    ],
+    "severity": "high",
+    "title": "Microsoft Office application crash",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Faulting application"
+      }
+    ],
+    "cause": "An Office application crashed in Office's own code. The most common causes are broken add-ins, a damaged Office installation, or a corrupt document/profile.",
+    "impact": "Documents and unsaved work keep getting lost; Outlook crashes can corrupt the mail profile.",
+    "solutions": [
+      "Run a Quick Repair: Settings > Apps > Microsoft 365/Office > Modify > Quick Repair (escalate to Online Repair if needed).",
+      "Start the app in safe mode (hold Ctrl while launching) - if it's stable, disable add-ins one by one (File > Options > Add-ins).",
+      "Make sure Office is up to date (File > Account > Update Options > Update Now)."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
+    "dataContains": [
+      "KERNELBASE.dll"
+    ],
+    "severity": "high",
+    "title": "Application crash (unhandled exception in KERNELBASE.dll)",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Faulting application"
+      }
+    ],
+    "cause": "KERNELBASE.dll is where unhandled exceptions surface - it's the messenger, not the culprit. The application raised an error it didn't handle; the bug is in the application (or an add-in/plugin it loaded).",
+    "impact": "The app keeps crashing and can take unsaved work with it.",
+    "solutions": [
+      "Update or reinstall {top} - unhandled exceptions are ordinary app bugs that updates fix.",
+      "If the app supports add-ins/extensions/plugins, disable them and retest - they're the most common trigger.",
+      "Check the Application log for a paired '.NET Runtime 1026' or 'Application Error' entry seconds earlier - it often names the deeper cause.",
+      "Search the web for: {top} crash KERNELBASE - fixes are usually version-specific."
+    ]
+  },
+  {
+    "provider": "Application Error",
+    "eventId": 1000,
     "severity": "high",
     "title": "Application crash",
     "breakdownProps": [
@@ -622,5 +743,526 @@
       "If it appears at every boot, check Task Manager > Startup for the offending entry."
     ],
     "impact": "The popups keep interrupting; the underlying program error stays unfixed."
+  },
+  {
+    "provider": "disk",
+    "eventId": 51,
+    "severity": "high",
+    "title": "Disk error during a paging operation",
+    "cause": "Windows hit an error reading or writing the page file or a memory-mapped file. Causes overlap with event 153: a struggling drive, a flaky cable/enclosure, or power management putting the disk to sleep mid-operation.",
+    "impact": "Paging errors can corrupt data in transit and often precede full drive errors - treat repeated entries as a failing-disk warning.",
+    "solutions": [
+      "Check the drive's SMART health with CrystalDiskInfo.",
+      "If it's an external/USB drive, disable USB selective suspend (Power Options > Advanced) and try another cable/port.",
+      "Reseat or replace the SATA cable for internal drives.",
+      "If entries are frequent, back up and plan a drive replacement."
+    ]
+  },
+  {
+    "provider": "Ntfs",
+    "altProviders": [
+      "Microsoft-Windows-Ntfs"
+    ],
+    "eventId": 137,
+    "severity": "medium",
+    "title": "NTFS transaction log error",
+    "cause": "The NTFS transaction resource manager hit a non-retryable error - usually a dirty shutdown, a snapshot/backup tool interfering, or early file system corruption on the named volume.",
+    "impact": "Usually self-heals, but repeated entries mean the volume's self-repair is struggling - corruption may follow.",
+    "solutions": [
+      "Run 'chkdsk /scan' on the named volume from an elevated prompt.",
+      "If it appears at every boot, check for disk errors (events 7/11/153 in this report) - fix the hardware first.",
+      "If a backup/imaging tool runs at those times, update it - old VSS-based tools trigger this."
+    ]
+  },
+  {
+    "provider": "srv",
+    "eventId": 2013,
+    "severity": "medium",
+    "title": "Disk is at or near capacity",
+    "cause": "A volume has nearly run out of free space. Windows itself needs free space for updates, the page file, and temporary files - below ~10% free, things start failing in odd ways.",
+    "impact": "Updates fail, apps crash on save, and SSDs slow down dramatically when nearly full.",
+    "solutions": [
+      "Run Disk Cleanup (cleanmgr) as administrator and remove previous Windows installations / update leftovers.",
+      "Use Settings > System > Storage to find what's using the space.",
+      "Move large personal files (videos, game libraries) to another drive."
+    ]
+  },
+  {
+    "provider": "volmgr",
+    "eventId": 46,
+    "severity": "medium",
+    "title": "Crash dump initialization failed",
+    "cause": "Windows couldn't set up the crash dump file, so if the machine blue-screens there will be no dump to analyze. Common after moving/shrinking the page file or with very low disk space.",
+    "impact": "None day-to-day, but if a blue screen happens you lose the evidence needed to diagnose it.",
+    "solutions": [
+      "Ensure the page file exists on C: (System Properties > Advanced > Performance Settings > Advanced > Virtual memory) and is at least 800 MB or system-managed.",
+      "Free up disk space on C:.",
+      "Check Control Panel > System > Advanced > Startup and Recovery: 'Write debugging information' should not be 'none'."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7001,
+    "severity": "medium",
+    "title": "Service failed because a dependency failed",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Service"
+      },
+      {
+        "index": 1,
+        "name": "Depends on"
+      }
+    ],
+    "cause": "The first service couldn't start because the service it depends on failed. The dependency is the real problem - fix it and this error disappears.",
+    "impact": "Both services' features are unavailable after boot.",
+    "solutions": [
+      "Look for a 7000/7023/7031 entry for the dependency service in this report and fix that first.",
+      "Check both services' startup type in services.msc - a dependency set to Disabled causes exactly this."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7011,
+    "severity": "medium",
+    "title": "Service timeout (unresponsive service)",
+    "breakdownProps": [
+      {
+        "index": 1,
+        "name": "Service"
+      }
+    ],
+    "cause": "A service didn't answer the Service Control Manager within the timeout (default 30 s). Usually a service stuck on slow disk I/O or waiting for the network during boot.",
+    "impact": "Boot and shutdown get slower; the stuck service's features lag or fail. Cascading timeouts can freeze logon for minutes.",
+    "solutions": [
+      "If it happens near boot on a hard disk, the disk is likely the bottleneck - consider an SSD.",
+      "Update the software that owns {top}.",
+      "Check the disk's health (CrystalDiskInfo) - a dying drive makes every service time out."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7024,
+    "severity": "medium",
+    "title": "Service terminated with a service-specific error",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Service"
+      }
+    ],
+    "cause": "The service shut itself down and reported its own internal error code. The code only means something to the service's developer, but it reliably identifies which service is unhealthy.",
+    "impact": "The service's features stay broken until its configuration or installation is repaired.",
+    "solutions": [
+      "Restart {top} in services.msc and watch whether it dies again.",
+      "Reinstall or update the software that owns the service.",
+      "Search the web for the service name plus the error code from the sample message."
+    ]
+  },
+  {
+    "provider": "Service Control Manager",
+    "eventId": 7043,
+    "severity": "noise",
+    "title": "Service didn't shut down cleanly",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Service"
+      }
+    ],
+    "cause": "During shutdown, a service didn't finish its cleanup within the allowed time and Windows moved on. Very common with Windows Update and antivirus services.",
+    "impact": "Slightly slower shutdowns at worst - the service starts normally next boot.",
+    "solutions": [
+      "Ignore occasional entries.",
+      "If shutdown is genuinely slow and {top} appears every time, update the software that owns it."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-DistributedCOM",
+    "eventId": 10005,
+    "severity": "medium",
+    "title": "DCOM couldn't start a service",
+    "cause": "A program asked DCOM to launch a service that failed to start or is disabled. The sample message names the service - the DCOM part is just the messenger.",
+    "impact": "Whatever feature needed that service silently doesn't work.",
+    "solutions": [
+      "Find the service named in the sample message in services.msc; if it's Disabled, set it to Manual.",
+      "Fix any matching service-start failures (7000-series) in this report."
+    ]
+  },
+  {
+    "provider": "Tcpip",
+    "eventId": 4227,
+    "severity": "medium",
+    "title": "TCP port exhaustion",
+    "cause": "Windows ran out of ephemeral TCP ports because some program is opening connections faster than it closes them - a connection leak. Common culprits: buggy update agents, crypto miners, stuck sync clients.",
+    "impact": "New network connections randomly fail for every program until the leaking process is restarted.",
+    "solutions": [
+      "Find the leaker: 'netstat -anob' from an elevated prompt and look for one process with thousands of connections.",
+      "Restart or update that program.",
+      "If it recurs and nothing looks legitimate, run a malware scan - miners and bots leak connections."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Dhcp-Client",
+    "eventId": 1001,
+    "severity": "medium",
+    "title": "DHCP address request failed",
+    "cause": "The PC asked the router for an IP address and got no usable answer. Either the network is down, the router's DHCP is unhappy, or the network adapter/driver is flaky.",
+    "impact": "No valid IP means no network at all on that adapter until DHCP succeeds.",
+    "solutions": [
+      "Reboot the router; check whether other devices get addresses.",
+      "Update the network adapter driver from the PC/motherboard vendor.",
+      "Try 'ipconfig /release' then 'ipconfig /renew' from an elevated prompt."
+    ]
+  },
+  {
+    "provider": "BTHUSB",
+    "eventId": 17,
+    "severity": "medium",
+    "title": "Bluetooth adapter failed",
+    "cause": "The Bluetooth radio stopped responding and Windows gave up on it. Often a USB power-management suspend the adapter never wakes from, or a failing driver.",
+    "impact": "All Bluetooth devices (mouse, keyboard, headphones) drop until the adapter recovers - often only after a reboot.",
+    "solutions": [
+      "Device Manager > Bluetooth adapter > Properties > Power Management: untick 'Allow the computer to turn off this device'.",
+      "Update the Bluetooth driver from the PC vendor (or Intel/Realtek/MediaTek directly).",
+      "If it's a USB dongle, move it to a rear motherboard port, ideally on a short extension away from USB 3 ports (interference)."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-DriverFrameworks-UserMode",
+    "eventId": 10110,
+    "severity": "medium",
+    "title": "User-mode driver crashed",
+    "cause": "A user-mode driver (commonly for phones, printers, card readers, or MTP devices) hit a problem and Windows restarted it. The paired 10111 event names the device.",
+    "impact": "The device disconnects/reconnects or stops responding; frequent crashes make it unusable.",
+    "solutions": [
+      "Note the device in the sample data, then update or reinstall its driver.",
+      "Try a different cable and port - MTP/phone connections are cable-sensitive.",
+      "If it's a printer/scanner, remove it and re-add it with the manufacturer's newest package."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-TaskScheduler",
+    "eventId": 101,
+    "severity": "medium",
+    "title": "Scheduled task failed to start",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Task"
+      }
+    ],
+    "cause": "Task Scheduler couldn't launch the named task - usually the account it runs as has a problem (changed password, missing permission) or the task's executable is gone.",
+    "impact": "Whatever the task automates (backups, updates, maintenance) silently stops happening.",
+    "solutions": [
+      "Open Task Scheduler, find {top}, and check its Last Run Result and the account it runs as.",
+      "If the task belongs to uninstalled software, delete the task.",
+      "Re-save the task's credentials if the account password changed."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Resource-Exhaustion-Detector",
+    "eventId": 2004,
+    "severity": "high",
+    "title": "Windows ran low on memory",
+    "cause": "Physical RAM plus page file were nearly exhausted. This event helpfully names the top memory consumers at that moment in the sample data - that list is your answer.",
+    "impact": "Apps crash or are silently killed, everything slows to a crawl, and unsaved work is at risk each time it happens.",
+    "solutions": [
+      "Read the sample data - it names the processes using the most memory when it happened.",
+      "If one program is leaking (grows over days), update or restart it periodically.",
+      "Let Windows manage the page file (System Properties > Advanced > Virtual memory > System managed).",
+      "If it happens under normal use, the machine simply needs more RAM."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-WMI",
+    "altProviders": [
+      "WMI"
+    ],
+    "eventId": 10,
+    "severity": "noise",
+    "title": "WMI filter couldn't connect (legacy leftover)",
+    "cause": "A WMI event query registered by some software references a namespace that doesn't exist anymore - a leftover from an update or uninstalled program. Famous, harmless log spam.",
+    "impact": "None.",
+    "solutions": [
+      "Ignore it - nothing user-facing is affected."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Kernel-EventTracing",
+    "eventId": 2,
+    "severity": "noise",
+    "title": "Diagnostic trace session failed to start",
+    "cause": "A performance/diagnostic logging session (ETW) couldn't start, usually because of a permissions quirk or a session limit. This affects telemetry and diagnostics collection, not the OS itself.",
+    "impact": "None for normal use.",
+    "solutions": [
+      "Ignore it unless you are actively trying to collect a performance trace."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-DeviceSetupManager",
+    "eventId": 131,
+    "severity": "noise",
+    "title": "Device metadata download failed",
+    "cause": "Windows tried to fetch pretty names/icons for a device from Microsoft's metadata service and couldn't - typically because the machine was briefly offline. Cosmetic only.",
+    "impact": "None - at worst a device shows a generic icon.",
+    "solutions": [
+      "Ignore it."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-CertificateServicesClient-AutoEnrollment",
+    "eventId": 6,
+    "severity": "low",
+    "title": "Certificate auto-enrollment failed",
+    "cause": "The machine tried to auto-enroll for certificates from a corporate certificate authority and couldn't reach it. On a home PC this is a leftover from a previous domain/work setup; on a work PC it means the CA is unreachable.",
+    "impact": "Home: none. Domain-joined: certificate-based logins/Wi-Fi may eventually break when old certificates expire.",
+    "solutions": [
+      "On a home PC that once had corporate software: ignore, or remove the leftover policy (gpedit/registry).",
+      "On a work PC: it needs to reach the corporate network (VPN) - tell IT if it persists."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Security-SPP",
+    "altProviders": [
+      "Software Protection Platform Service"
+    ],
+    "eventId": 8198,
+    "severity": "low",
+    "title": "Windows license activation failed",
+    "cause": "The Software Protection service couldn't complete activation - offline machine, KMS server unreachable (work PCs), or a genuine licensing problem. The 0xC004... code in the sample narrows it down.",
+    "impact": "Persistent failure eventually adds an 'Activate Windows' watermark and blocks personalisation settings.",
+    "solutions": [
+      "Run Settings > System > Activation and use the Troubleshoot button.",
+      "Work PCs: connect to the office network/VPN so the KMS server is reachable.",
+      "Look up the exact 0xC004 code from the sample message for the specific cause."
+    ]
+  },
+  {
+    "provider": "MsiInstaller",
+    "eventId": 11708,
+    "severity": "medium",
+    "title": "Program installation failed",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Product"
+      }
+    ],
+    "cause": "A Windows Installer (.msi) install was rolled back before completing. Common causes: insufficient rights, an older version blocking the upgrade, or an interrupted install.",
+    "impact": "The program isn't installed (or is half-installed and broken).",
+    "solutions": [
+      "Retry the installer by right-clicking it and choosing 'Run as administrator'.",
+      "Uninstall any older version of {top} first, then install fresh.",
+      "If it keeps failing, use Microsoft's 'Program Install and Uninstall troubleshooter' to clear broken installer state."
+    ]
+  },
+  {
+    "provider": "VSS",
+    "eventId": 8193,
+    "severity": "noise",
+    "title": "Volume Shadow Copy registry access error",
+    "cause": "The VSS service hit an access-denied reading a registry key, almost always right after a Windows upgrade or when a backup product's writer is misregistered. One of the most common harmless errors in the Application log.",
+    "impact": "Usually none; if backups actually fail, this may be part of why.",
+    "solutions": [
+      "If backups and restore points work: ignore it.",
+      "If backups fail too: re-register VSS writers or repair/reinstall the backup software."
+    ]
+  },
+  {
+    "provider": "VSS",
+    "eventId": 8194,
+    "severity": "noise",
+    "title": "Volume Shadow Copy callback access denied",
+    "cause": "A VSS writer couldn't call back into the requesting process - a permissions quirk between services, widely logged and almost never user-visible.",
+    "impact": "None unless backups are failing.",
+    "solutions": [
+      "Ignore it unless an actual backup job reports failure."
+    ]
+  },
+  {
+    "provider": "ESENT",
+    "eventId": 455,
+    "severity": "noise",
+    "title": "Database engine couldn't open a log file",
+    "cause": "A Windows component's internal database (search, tile cache, licensing) is missing a log file - typically leftovers from an upgrade. Windows recreates what it needs.",
+    "impact": "None in almost all cases.",
+    "solutions": [
+      "Ignore occasional entries.",
+      "If it repeats every boot for the same path, create the missing folder named in the message - a known Windows quirk."
+    ]
+  },
+  {
+    "provider": ".NET Runtime",
+    "eventId": 1023,
+    "severity": "high",
+    "title": ".NET fatal internal error",
+    "cause": "The .NET runtime itself crashed (not just the app). Usually a corrupt .NET installation, a broken JIT, or memory problems.",
+    "impact": "Every .NET-based app is potentially affected until the runtime is repaired.",
+    "solutions": [
+      "Repair .NET: run 'dism /online /cleanup-image /restorehealth' then 'sfc /scannow' from an elevated prompt.",
+      "Install the latest .NET Framework / .NET runtime from Microsoft.",
+      "If several unrelated programs also crash, test the RAM (Windows Memory Diagnostic)."
+    ]
+  },
+  {
+    "provider": "SideBySide",
+    "eventId": 33,
+    "severity": "medium",
+    "title": "Program is missing a required runtime (SxS)",
+    "cause": "An application couldn't start because a required side-by-side component - almost always a specific Visual C++ Redistributable version - isn't installed. The sample message names the exact assembly.",
+    "impact": "The affected program won't launch at all until the runtime is installed.",
+    "solutions": [
+      "Read the sample message; note the version (e.g. Microsoft.VC90 = Visual C++ 2008).",
+      "Install that Visual C++ Redistributable (both x64 and x86) from Microsoft.",
+      "Reinstalling the affected program usually pulls in the right runtime too."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Winlogon",
+    "eventId": 6000,
+    "severity": "low",
+    "title": "Logon notification subscriber unavailable",
+    "cause": "A component that participates in logon (commonly Group Policy client or a third-party credential/VPN product) wasn't ready when the user signed in.",
+    "impact": "Occasional slow logons; if it's every logon, some sign-in-time feature (policy, drive mappings, VPN) isn't running.",
+    "solutions": [
+      "Occasional entries after updates: ignore.",
+      "Every logon: check services.msc that 'Group Policy Client' is Running/Automatic, and update any third-party logon software (VPN, SSO)."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-CAPI2",
+    "eventId": 513,
+    "severity": "low",
+    "title": "Cryptographic Services error during backup (System Writer)",
+    "cause": "Cryptographic Services failed while backing up system files as part of VSS - a permissions issue on a system folder is the textbook cause.",
+    "impact": "System-state backups may be incomplete; day-to-day use is unaffected.",
+    "solutions": [
+      "If you don't run system-state backups: ignore it.",
+      "If backups fail: search the exact message - the standard fix grants the service access to the folder named in it."
+    ]
+  },
+  {
+    "provider": "Schannel",
+    "eventId": 36888,
+    "severity": "noise",
+    "title": "TLS alert sent to a remote host",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "Alert code"
+      }
+    ],
+    "cause": "This machine ended a TLS handshake by sending a fatal alert to the other side - the mirror image of event 36887. Something connected to this PC (or a local app talked to a server) with mismatched TLS settings.",
+    "impact": "Usually none - the connection simply used different settings or was abandoned.",
+    "solutions": [
+      "Ignore unless a specific app's secure connections are failing; then update that app."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Immersive-Shell",
+    "eventId": 5973,
+    "severity": "low",
+    "title": "Windows app failed to launch",
+    "breakdownProps": [
+      {
+        "index": 0,
+        "name": "App"
+      }
+    ],
+    "cause": "A Store/UWP app's activation failed - broken app registration, corrupted package, or a profile issue. The app ID in the breakdown says which one.",
+    "impact": "That app won't open (or opens and instantly closes) until repaired.",
+    "solutions": [
+      "Settings > Apps > find the app > Advanced options > Repair (then Reset if needed).",
+      "Re-register Store apps: run 'wsreset' and check for app updates in the Microsoft Store."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-PrintService",
+    "eventId": 372,
+    "severity": "medium",
+    "title": "Document failed to print",
+    "cause": "The spooler couldn't deliver a document to the printer - driver mismatch, printer offline, or a corrupt job wedged in the queue.",
+    "impact": "Print jobs silently vanish or jam the whole queue behind them.",
+    "solutions": [
+      "Clear the queue: stop the Print Spooler service, delete C:\\Windows\\System32\\spool\\PRINTERS\\*, start it again.",
+      "Reinstall the printer with the manufacturer's latest driver.",
+      "Check the printer is online and reachable (for network printers, ping its IP)."
+    ]
+  },
+  {
+    "provider": "Perflib",
+    "altProviders": [
+      "Microsoft-Windows-Perflib"
+    ],
+    "eventId": 1023,
+    "severity": "noise",
+    "title": "Performance counter library failed to load",
+    "cause": "Like event 1008: a performance-counter extension DLL for some service couldn't load. Affects Performance Monitor statistics only.",
+    "impact": "None outside Performance Monitor.",
+    "solutions": [
+      "Ignore it, or rebuild counters with 'lodctr /R' from an elevated prompt if you need them."
+    ]
+  },
+  {
+    "provider": "PerfNet",
+    "eventId": 2004,
+    "severity": "noise",
+    "title": "Server service performance counters unavailable",
+    "cause": "Performance counters for the file-sharing (Server) service couldn't be opened - usually because the service is disabled or slow to start. Statistics-only impact.",
+    "impact": "None outside Performance Monitor.",
+    "solutions": [
+      "Ignore it."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Search",
+    "eventId": 1008,
+    "severity": "low",
+    "title": "Windows Search index reset",
+    "cause": "The search indexer found its index damaged (often after a dirty shutdown) and is rebuilding it from scratch.",
+    "impact": "Search results are incomplete and disk activity is higher until reindexing finishes (can take hours).",
+    "solutions": [
+      "Let it finish - indexing completes on its own.",
+      "If it recurs every boot, fix the cause of the dirty shutdowns first (see any unexpected-shutdown findings in this report)."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-GroupPolicy",
+    "eventId": 1085,
+    "severity": "medium",
+    "title": "A Group Policy component failed to apply",
+    "cause": "Policy processing ran, but one named extension (scripts, drive maps, registry, etc.) failed. The message names the component.",
+    "impact": "Settings managed by that component drift; on work PCs, security configuration may be stale.",
+    "solutions": [
+      "Run 'gpupdate /force' from an elevated prompt and re-check the log.",
+      "On a work machine, report the component named in the message to IT.",
+      "On a home PC with no domain: leftover policies from old software can be cleared by resetting local policy."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Backup",
+    "eventId": 517,
+    "severity": "medium",
+    "title": "Windows Backup failed",
+    "cause": "A scheduled Windows Backup run did not complete. The error code in the sample message identifies the specific cause (target full, VSS failure, unreachable destination).",
+    "impact": "You have no recent backup - the one time that matters, it matters completely.",
+    "solutions": [
+      "Open the backup app's history for the exact error, and check the destination drive has space and is connected.",
+      "Fix any VSS errors listed in this report - most backup failures are VSS failures.",
+      "Run the backup manually to confirm the fix."
+    ]
+  },
+  {
+    "provider": "Microsoft-Windows-Time-Service",
+    "eventId": 129,
+    "severity": "noise",
+    "title": "Time server lookup failed (retrying)",
+    "cause": "NtpClient couldn't resolve or reach the configured time server this attempt; it backs off and retries automatically.",
+    "impact": "None unless the clock visibly drifts.",
+    "solutions": [
+      "Ignore occasional entries; if constant, run 'w32tm /resync' and check firewall/DNS."
+    ]
   }
 ]
